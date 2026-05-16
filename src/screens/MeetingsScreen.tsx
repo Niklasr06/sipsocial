@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -105,7 +105,8 @@ const MeetingsScreen: React.FC<Props> = ({ navigation }) => {
             meeting={m}
             onOpenChat={(matchId) => navigation.navigate('LimitedChat', { matchId })}
             onCheckIn={() => navigation.navigate('QRCheckIn', { meetingId: m.id })}
-            onCancel={() => cancelMeeting(m.id)}
+            onCancel={() => confirmCancel(m.id, cancelMeeting)}
+            onReschedule={() => navigation.navigate('MeetingReschedule', { meetingId: m.id })}
             canCancel={tab === 'upcoming'}
           />
         ))
@@ -114,15 +115,44 @@ const MeetingsScreen: React.FC<Props> = ({ navigation }) => {
   );
 };
 
+function confirmCancel(meetingId: string, cancel: (id: string) => Promise<void>): void {
+  const doCancel = () => {
+    void cancel(meetingId);
+  };
+  if (Platform.OS === 'web') {
+    // eslint-disable-next-line no-alert
+    if (typeof window !== 'undefined' && window.confirm('Treffen wirklich absagen?')) {
+      doCancel();
+    }
+    return;
+  }
+  Alert.alert(
+    'Treffen absagen?',
+    'Der andere User wird benachrichtigt. Du kannst das nicht rückgängig machen.',
+    [
+      { text: 'Doch nicht', style: 'cancel' },
+      { text: 'Absagen', style: 'destructive', onPress: doCancel },
+    ],
+  );
+}
+
 interface MeetingCardProps {
   meeting: Meeting;
   onOpenChat: (matchId: string) => void;
   onCheckIn: () => void;
   onCancel: () => void;
+  onReschedule: () => void;
   canCancel: boolean;
 }
 
-const MeetingCard: React.FC<MeetingCardProps> = ({ meeting, onOpenChat, onCheckIn, onCancel, canCancel }) => {
+const MeetingCard: React.FC<MeetingCardProps> = ({
+  meeting,
+  onOpenChat,
+  onCheckIn,
+  onCancel,
+  onReschedule,
+  canCancel,
+}) => {
   const { getCafe, getUser, matches, currentUser } = useApp();
   const cafe = getCafe(meeting.cafeId);
   const match = matches.find((m) => m.id === meeting.matchId);
@@ -181,9 +211,18 @@ const MeetingCard: React.FC<MeetingCardProps> = ({ meeting, onOpenChat, onCheckI
       ) : null}
 
       {canCancel && meeting.status !== 'cancelled' ? (
-        <Pressable onPress={onCancel} style={{ marginTop: spacing.md, alignSelf: 'flex-start' }}>
-          <Text style={[typography.small, { color: colors.error, fontWeight: '600' }]}>Treffen absagen</Text>
-        </Pressable>
+        <View style={styles.secondaryActions}>
+          <Pressable onPress={onReschedule} hitSlop={8}>
+            <Text style={[typography.small, { color: colors.primary, fontWeight: '600' }]}>
+              Verschieben
+            </Text>
+          </Pressable>
+          <Pressable onPress={onCancel} hitSlop={8}>
+            <Text style={[typography.small, { color: colors.error, fontWeight: '600' }]}>
+              Treffen absagen
+            </Text>
+          </Pressable>
+        </View>
       ) : null}
     </Card>
   );
@@ -222,6 +261,14 @@ const styles = StyleSheet.create({
   metaCell: { flexDirection: 'row', alignItems: 'center' },
   metaText: { ...typography.small, color: colors.textSecondary, marginLeft: 6 },
   actions: { flexDirection: 'row', marginTop: spacing.lg },
+  secondaryActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
 });
 
 export default MeetingsScreen;

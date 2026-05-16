@@ -45,6 +45,11 @@ function handleNotificationResponse(
     navRef.navigate('Main', { screen: 'Matches' });
   } else if (data.type === 'meeting_created' && data.meeting_id) {
     navRef.navigate('QRCheckIn', { meetingId: data.meeting_id });
+  } else if (
+    (data.type === 'meeting_cancelled' || data.type === 'meeting_rescheduled') &&
+    data.meeting_id
+  ) {
+    navRef.navigate('Main', { screen: 'Meetings' });
   }
 }
 

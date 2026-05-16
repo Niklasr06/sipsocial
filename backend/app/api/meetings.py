@@ -60,10 +60,42 @@ async def list_meetings(user_id: str) -> List[Meeting]:
 
 
 @router.patch("/{meeting_id}", response_model=Meeting)
-async def update_meeting(meeting_id: str, patch: MeetingUpdate) -> Meeting:
+async def update_meeting(
+    meeting_id: str,
+    patch: MeetingUpdate,
+    current_user: User = Depends(get_current_user),
+) -> Meeting:
+    existing = await meeting_service.get(meeting_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    match = await matching_service.get_match(existing.match_id)
+    if not match or current_user.id not in {match.user_a_id, match.user_b_id}:
+        raise HTTPException(status_code=403, detail="You are not a participant of this meeting.")
+
     meeting = await meeting_service.update(meeting_id, patch)
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
+
+    # Notify the other side on user-visible status changes.
+    other_id = match.user_b_id if current_user.id == match.user_a_id else match.user_a_id
+    rescheduled = any([patch.date, patch.start_time, patch.end_time, patch.cafe_id])
+
+    if patch.status == "cancelled":
+        await notification_service.notify_user(
+            other_id,
+            title="Treffen abgesagt",
+            body=f"{current_user.pseudonym} hat das Treffen abgesagt.",
+            data={"type": "meeting_cancelled", "meeting_id": meeting.id},
+        )
+    elif rescheduled and patch.status != "cancelled":
+        cafe = await cafe_service.get_cafe(meeting.cafe_id)
+        cafe_name = cafe.name if cafe else "das Café"
+        await notification_service.notify_user(
+            other_id,
+            title="Treffen verschoben",
+            body=f"{current_user.pseudonym} hat das Treffen geändert: {meeting.date}, {meeting.start_time} bei {cafe_name}.",
+            data={"type": "meeting_rescheduled", "meeting_id": meeting.id},
+        )
     return meeting
 
 

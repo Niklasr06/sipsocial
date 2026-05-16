@@ -23,6 +23,9 @@ class MeetingCreate(BaseModel):
 class MeetingUpdate(BaseModel):
     status: Optional[MeetingStatus] = None
     cafe_id: Optional[str] = None
+    date: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
     check_in_user_id: Optional[str] = None  # if set, mark this user as checked in
 
 

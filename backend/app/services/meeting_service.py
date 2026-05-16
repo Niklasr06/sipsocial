@@ -114,6 +114,18 @@ async def update(meeting_id: str, patch: MeetingUpdate) -> Optional[Meeting]:
                 updates.append(f"cafe_id = ${idx}")
                 args.append(patch.cafe_id)
                 idx += 1
+            if patch.date:
+                updates.append(f"date = ${idx}")
+                args.append(to_date(patch.date))
+                idx += 1
+            if patch.start_time:
+                updates.append(f"start_time = ${idx}")
+                args.append(to_time(patch.start_time))
+                idx += 1
+            if patch.end_time:
+                updates.append(f"end_time = ${idx}")
+                args.append(to_time(patch.end_time))
+                idx += 1
             if updates:
                 args.append(meeting_id)
                 await conn.execute(
