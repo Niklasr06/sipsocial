@@ -23,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import auth, availability, cafes, chat, icebreakers, matching, meetings, profiles, users
 from app.core.config import get_settings
 from app.db import postgres
+from app.services import reminder_service
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
 logger = logging.getLogger("sipsocial")
@@ -31,9 +32,11 @@ logger = logging.getLogger("sipsocial")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await postgres.connect()
+    reminder_service.start()
     try:
         yield
     finally:
+        await reminder_service.stop()
         await postgres.disconnect()
 
 

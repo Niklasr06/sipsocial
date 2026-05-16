@@ -91,10 +91,14 @@ CREATE TABLE IF NOT EXISTS meetings (
   status      TEXT NOT NULL DEFAULT 'confirmed',
   qr_code     TEXT NOT NULL,
   check_ins   JSONB NOT NULL DEFAULT '[]'::jsonb,
+  reminder_sent_at TIMESTAMPTZ,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Idempotent migration for databases created before the reminder column.
+ALTER TABLE meetings ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS meetings_match ON meetings (match_id);
+CREATE INDEX IF NOT EXISTS meetings_reminder ON meetings (reminder_sent_at) WHERE reminder_sent_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS chat_messages (
   id                 TEXT PRIMARY KEY,

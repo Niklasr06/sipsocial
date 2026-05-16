@@ -13,3 +13,4 @@ export { QRCodePlaceholder } from './QRCodePlaceholder';
 export { ErrorBoundary } from './ErrorBoundary';
 export { WebPhoneFrame } from './WebPhoneFrame';
 export { CafeMap } from './CafeMap';
+export { EmptyState } from './EmptyState';

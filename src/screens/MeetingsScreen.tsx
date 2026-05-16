@@ -5,7 +5,7 @@ import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MainTabParamList, RootStackParamList } from '../navigation/types';
-import { Avatar, Button, Card, Screen, StatusPill } from '../components';
+import { Avatar, Button, Card, EmptyState, Screen, StatusPill } from '../components';
 import { colors, fonts, radius, spacing, typography } from '../theme';
 import { useApp } from '../store/AppContext';
 import { Meeting } from '../types';
@@ -24,7 +24,7 @@ const TAB_LABELS: { value: Tab; label: string }[] = [
 ];
 
 const MeetingsScreen: React.FC<Props> = ({ navigation }) => {
-  const { meetings, cancelMeeting } = useApp();
+  const { meetings, cancelMeeting, fetchMatches } = useApp();
   const [tab, setTab] = useState<Tab>('upcoming');
 
   const filtered = useMemo(() => {
@@ -48,7 +48,7 @@ const MeetingsScreen: React.FC<Props> = ({ navigation }) => {
   }, [meetings, tab]);
 
   return (
-    <Screen>
+    <Screen onRefresh={() => fetchMatches().catch(() => null)}>
       <Text style={styles.title}>Treffen</Text>
       <Text style={[typography.body, { color: colors.textSecondary, marginTop: 6 }]}>
         Übersicht aller bestätigten Vorschläge — vor und nach dem Kaffee.
@@ -77,27 +77,25 @@ const MeetingsScreen: React.FC<Props> = ({ navigation }) => {
       </View>
 
       {filtered.length === 0 ? (
-        <Card tone="white" padding="lg" style={{ marginTop: spacing.lg }}>
-          <Text style={[typography.bodyStrong, { color: colors.textDark }]}>
-            Hier ist noch nichts.
-          </Text>
-          <Text style={[typography.body, { color: colors.textSecondary, marginTop: 4 }]}>
-            {tab === 'upcoming'
-              ? 'Aktuell keine geplanten Treffen. Schau bei den Vorschlägen rein.'
+        <EmptyState
+          icon={tab === 'cancelled' ? 'close-circle-outline' : tab === 'past' ? 'time-outline' : 'cafe-outline'}
+          title={
+            tab === 'upcoming'
+              ? 'Noch keine geplanten Treffen'
+              : tab === 'past'
+              ? 'Bisher keine vergangenen Treffen'
+              : 'Du hast nichts abgesagt'
+          }
+          description={
+            tab === 'upcoming'
+              ? 'Such dir bei den Matches ein passendes Profil und schlag ein Café-Treffen vor.'
               : tab === 'past'
               ? 'Sobald ihr ein Treffen hattet, taucht es hier auf.'
-              : 'Du hast bisher keine Treffen abgesagt.'}
-          </Text>
-          {tab === 'upcoming' ? (
-            <Button
-              label="Zu den Vorschlägen"
-              variant="secondary"
-              size="md"
-              onPress={() => navigation.navigate('Matches')}
-              style={{ marginTop: spacing.md, alignSelf: 'flex-start' }}
-            />
-          ) : null}
-        </Card>
+              : 'Wenn du mal ein Treffen absagst, landet es hier.'
+          }
+          primaryActionLabel={tab === 'upcoming' ? 'Zu den Matches' : undefined}
+          onPrimaryAction={tab === 'upcoming' ? () => navigation.navigate('Matches') : undefined}
+        />
       ) : (
         filtered.map((m) => (
           <MeetingCard

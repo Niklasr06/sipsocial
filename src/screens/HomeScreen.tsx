@@ -51,7 +51,7 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const greeting = greetingForHour();
 
   return (
-    <Screen>
+    <Screen onRefresh={() => fetchMatches().catch(() => null)}>
       <View style={styles.headerRow}>
         <View>
           <Text style={[typography.caption, { color: colors.textSecondary }]}>{greeting}</Text>

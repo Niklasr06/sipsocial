@@ -5,7 +5,7 @@ import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MainTabParamList, RootStackParamList } from '../navigation/types';
-import { Avatar, Button, Card, ScoreBadge, Screen, StatusPill } from '../components';
+import { Avatar, Button, Card, EmptyState, ScoreBadge, Screen, StatusPill } from '../components';
 import { colors, fonts, radius, spacing, typography } from '../theme';
 import { useApp } from '../store/AppContext';
 import { formatDateLong, formatTimeRange } from '../utils/date';
@@ -18,7 +18,10 @@ type Props = CompositeScreenProps<
 >;
 
 const MatchScreen: React.FC<Props> = ({ navigation }) => {
-  const { matches, fetchMatches, getUser, getCafe, cancelMatch } = useApp();
+  const { matches, fetchMatches, getUser, getCafe, cancelMatch, currentUser, availabilities } = useApp();
+  const myAvailCount = currentUser
+    ? availabilities.filter((a) => a.userId === currentUser.id).length
+    : 0;
 
   useEffect(() => {
     if (matches.length === 0) fetchMatches();
@@ -30,7 +33,7 @@ const MatchScreen: React.FC<Props> = ({ navigation }) => {
   const handled = visible.filter((m) => m.status === 'accepted');
 
   return (
-    <Screen>
+    <Screen onRefresh={() => fetchMatches().catch(() => null)}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>Matches</Text>
         <Button
@@ -46,14 +49,25 @@ const MatchScreen: React.FC<Props> = ({ navigation }) => {
       </Text>
 
       {open.length === 0 ? (
-        <Card tone="white" padding="lg" style={{ marginTop: spacing.xl }}>
-          <Text style={[typography.bodyStrong, { color: colors.textDark }]}>
-            Aktuell keine offenen Vorschläge.
-          </Text>
-          <Text style={[typography.body, { color: colors.textSecondary, marginTop: 4 }]}>
-            Aktualisiere deine Verfügbarkeit — manchmal hilft schon ein anderes Zeitfenster.
-          </Text>
-        </Card>
+        myAvailCount === 0 ? (
+          <EmptyState
+            icon="calendar-outline"
+            title="Du hast noch keine Verfügbarkeit"
+            description="Trag mind. ein Zeitfenster ein — wir suchen dann passende Cafés und Menschen in deinem Bereich."
+            primaryActionLabel="Verfügbarkeit hinzufügen"
+            onPrimaryAction={() => navigation.navigate('AvailabilityEdit')}
+          />
+        ) : (
+          <EmptyState
+            icon="sparkles-outline"
+            title="Aktuell keine offenen Vorschläge"
+            description="Mehr Zeitfenster oder andere Bereiche erhöhen die Chance auf Matches."
+            primaryActionLabel="Verfügbarkeit erweitern"
+            onPrimaryAction={() => navigation.navigate('AvailabilityEdit')}
+            secondaryActionLabel="Erneut suchen"
+            onSecondaryAction={() => fetchMatches()}
+          />
+        )
       ) : (
         open.map((m) => {
           const other = getUser(m.userBId);

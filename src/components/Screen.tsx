@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
   ScrollView,
   StyleProp,
   StyleSheet,
@@ -19,6 +20,12 @@ interface Props {
   contentStyle?: StyleProp<ViewStyle>;
   withKeyboard?: boolean;
   edges?: ('top' | 'bottom' | 'left' | 'right')[];
+  /**
+   * If provided, the screen renders a pull-to-refresh control. The
+   * promise's lifetime drives the spinner — keep it short or the user
+   * stares at a spinning indicator forever.
+   */
+  onRefresh?: () => Promise<unknown>;
 }
 
 export const Screen: React.FC<Props> = ({
@@ -29,8 +36,21 @@ export const Screen: React.FC<Props> = ({
   contentStyle,
   withKeyboard,
   edges = ['top', 'bottom'],
+  onRefresh,
 }) => {
   const insets = useSafeAreaInsets();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    if (!onRefresh) return;
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const Content = scroll ? (
     <ScrollView
       contentContainerStyle={[
@@ -40,6 +60,16 @@ export const Screen: React.FC<Props> = ({
       ]}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
+      refreshControl={
+        onRefresh ? (
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        ) : undefined
+      }
     >
       {children}
     </ScrollView>
