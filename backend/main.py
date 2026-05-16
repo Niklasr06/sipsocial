@@ -17,11 +17,14 @@ Places key was provided.
 from contextlib import asynccontextmanager
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.api import auth, availability, cafes, chat, icebreakers, matching, meetings, profiles, users
 from app.core.config import get_settings
+from app.core.rate_limit import limiter
 from app.db import postgres
 from app.services import reminder_service
 
@@ -42,12 +45,18 @@ async def lifespan(app: FastAPI):
 
 settings = get_settings()
 
+# Rate limiting via slowapi (defined in core.rate_limit so route modules
+# can share the same Limiter instance). Per-route limits are declared on
+# the individual endpoints with @limiter.limit().
+
 app = FastAPI(
     title="SipSocial API",
     version="1.0.0",
     description="Backend for the SipSocial coffee-meetup app.",
     lifespan=lifespan,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,

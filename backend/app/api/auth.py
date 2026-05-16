@@ -1,9 +1,13 @@
-"""Authentication routes: register, login, refresh, logout, /me."""
+"""Authentication routes: register, login, refresh, logout, /me.
 
-from __future__ import annotations
+Note: ``from __future__ import annotations`` is intentionally NOT used.
+FastAPI + slowapi + Body() defaults trip pydantic's TypeAdapter when
+annotations are postponed (it tries to resolve ForwardRefs and fails).
+"""
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 
+from app.core.rate_limit import limiter
 from app.core.security import get_current_user
 from app.db.postgres import is_connected
 import logging
@@ -26,7 +30,8 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-async def register(payload: RegisterRequest) -> AuthResponse:
+@limiter.limit("5/minute")
+async def register(request: Request, payload: RegisterRequest = Body(...)) -> AuthResponse:
     if not is_connected():
         raise HTTPException(
             status_code=503,
@@ -55,7 +60,8 @@ async def register(payload: RegisterRequest) -> AuthResponse:
 
 
 @router.post("/login", response_model=AuthResponse)
-async def login(payload: LoginRequest) -> AuthResponse:
+@limiter.limit("10/minute")
+async def login(request: Request, payload: LoginRequest = Body(...)) -> AuthResponse:
     user = await user_service.get_user_by_email(payload.email)
     hashed = await user_service.get_password_hash(user.id) if user else None
     if not user or not auth_service.verify_password(payload.password, hashed):
@@ -70,7 +76,8 @@ async def login(payload: LoginRequest) -> AuthResponse:
 
 
 @router.post("/refresh", response_model=RefreshResponse)
-async def refresh(payload: RefreshRequest) -> RefreshResponse:
+@limiter.limit("30/minute")
+async def refresh(request: Request, payload: RefreshRequest = Body(...)) -> RefreshResponse:
     """Exchange a refresh token for a fresh access token *and* refresh token.
 
     Token rotation: the presented refresh token is revoked atomically and
@@ -102,7 +109,8 @@ async def me(current: User = Depends(get_current_user)) -> User:
 
 
 @router.post("/password-reset/request", status_code=202, response_class=Response)
-async def password_reset_request(payload: PasswordResetRequest) -> Response:
+@limiter.limit("3/minute")
+async def password_reset_request(request: Request, payload: PasswordResetRequest = Body(...)) -> Response:
     """Issue a password-reset token for the given email.
 
     Always returns 202 — we don't tell the caller whether the email exists,
@@ -124,7 +132,8 @@ async def password_reset_request(payload: PasswordResetRequest) -> Response:
 
 
 @router.post("/password-reset/confirm", response_model=AuthResponse)
-async def password_reset_confirm(payload: PasswordResetConfirm) -> AuthResponse:
+@limiter.limit("5/minute")
+async def password_reset_confirm(request: Request, payload: PasswordResetConfirm = Body(...)) -> AuthResponse:
     """Consume a reset token + set a new password atomically.
 
     Returns a fresh access + refresh pair so the client can transition
