@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "SipSocial",
+    "slug": "sipsocial",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "sipsocial",
+    "splash": {
+      "backgroundColor": "#F7F1E8",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#F7F1E8"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}

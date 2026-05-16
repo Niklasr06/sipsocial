@@ -1,0 +1,581 @@
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useState } from 'react';
+import {
+  Availability,
+  Cafe,
+  ChatMessage,
+  Match,
+  Meeting,
+  User,
+} from '../types';
+import { MOCK_USERS } from '../data/mockUsers';
+import { MOCK_CAFES } from '../data/mockCafes';
+import { MOCK_AVAILABILITIES } from '../data/mockAvailabilities';
+import { findMatches } from '../services/matchingService';
+import { mockRegister } from '../services/authService';
+import { createMeeting, recomputeStatusFromCheckIns } from '../services/meetingService';
+import { sendMessage } from '../services/chatService';
+import { simulateCheckIn } from '../services/checkInService';
+import { registerNoShow } from '../services/noShowService';
+import { createProfile } from '../services/profileService';
+import { createSeedMessages } from '../data/mockMessages';
+import {
+  apiUserToLocal,
+  backendCheckInMeeting,
+  backendCreateUser,
+  backendFindMatches,
+  backendLoadAvailabilities,
+  backendSaveAvailability,
+  backendUpdateUser,
+} from './backendBridge';
+import { authApi } from '../services/authApi';
+import { ApiError, isApiUnavailable } from '../services/apiClient';
+import { restoreToken, setToken } from '../services/tokenStore';
+import { clearPushTokenForCurrentUser, registerPushTokenForCurrentUser } from '../services/pushService';
+
+interface AppState {
+  currentUser: User | null;
+  users: User[];
+  availabilities: Availability[];
+  matches: Match[];
+  meetings: Meeting[];
+  cafes: Cafe[];
+  chatMessages: ChatMessage[];
+}
+
+type Action =
+  | { type: 'SET_USER'; user: User | null }
+  | { type: 'UPDATE_USER'; patch: Partial<User> }
+  | { type: 'ADD_AVAILABILITY'; availability: Availability }
+  | { type: 'REPLACE_AVAILABILITIES'; userId: string; list: Availability[] }
+  | { type: 'SET_MATCHES'; matches: Match[] }
+  | { type: 'UPDATE_MATCH'; id: string; patch: Partial<Match> }
+  | { type: 'ADD_MEETING'; meeting: Meeting; seedMessages?: ChatMessage[] }
+  | { type: 'UPDATE_MEETING'; id: string; meeting: Meeting }
+  | { type: 'ADD_MESSAGE'; message: ChatMessage }
+  | { type: 'REGISTER_NO_SHOW'; userId: string };
+
+const initialState: AppState = {
+  currentUser: null,
+  users: MOCK_USERS,
+  availabilities: MOCK_AVAILABILITIES,
+  matches: [],
+  meetings: [],
+  cafes: MOCK_CAFES,
+  chatMessages: [],
+};
+
+function reducer(state: AppState, action: Action): AppState {
+  switch (action.type) {
+    case 'SET_USER':
+      return { ...state, currentUser: action.user };
+    case 'UPDATE_USER': {
+      if (!state.currentUser) return state;
+      const next = createProfile(state.currentUser, action.patch);
+      return { ...state, currentUser: next };
+    }
+    case 'ADD_AVAILABILITY':
+      return { ...state, availabilities: [...state.availabilities, action.availability] };
+    case 'REPLACE_AVAILABILITIES': {
+      const others = state.availabilities.filter((a) => a.userId !== action.userId);
+      return { ...state, availabilities: [...others, ...action.list] };
+    }
+    case 'SET_MATCHES':
+      return { ...state, matches: action.matches };
+    case 'UPDATE_MATCH':
+      return {
+        ...state,
+        matches: state.matches.map((m) => (m.id === action.id ? { ...m, ...action.patch } : m)),
+      };
+    case 'ADD_MEETING':
+      return {
+        ...state,
+        meetings: [...state.meetings, action.meeting],
+        chatMessages: action.seedMessages
+          ? [...state.chatMessages, ...action.seedMessages]
+          : state.chatMessages,
+      };
+    case 'UPDATE_MEETING':
+      return {
+        ...state,
+        meetings: state.meetings.map((m) => (m.id === action.id ? action.meeting : m)),
+      };
+    case 'ADD_MESSAGE':
+      return { ...state, chatMessages: [...state.chatMessages, action.message] };
+    case 'REGISTER_NO_SHOW': {
+      if (!state.currentUser || state.currentUser.id !== action.userId) return state;
+      return { ...state, currentUser: registerNoShow(state.currentUser) };
+    }
+    default:
+      return state;
+  }
+}
+
+export interface AuthError {
+  message: string;
+  code: 'invalid_credentials' | 'email_taken' | 'network' | 'unknown';
+}
+
+export interface AppContextValue extends AppState {
+  /** ``true`` while we restore a saved token on launch. */
+  authBootstrapping: boolean;
+  /** Real backend register. Throws ``AuthError`` for the UI to render. */
+  signUp: (payload: { pseudonym: string; email: string; password: string }) => Promise<User>;
+  /** Real backend login. Throws ``AuthError`` for the UI to render. */
+  signIn: (payload: { email: string; password: string }) => Promise<User>;
+  /** Clears the session and returns the navigator to the onboarding stack. */
+  signOut: () => Promise<void>;
+  setCurrentUser: (user: User | null) => void;
+  updateUser: (patch: Partial<User>) => void;
+  /**
+   * Persists user updates to the backend if reachable. The local state is
+   * updated either way so the UI stays responsive.
+   */
+  saveUserToBackend: (patch: Partial<User>) => Promise<void>;
+  /**
+   * Persists an availability entry to the backend. Resolves once the local
+   * state is set. Backend failures are swallowed (we still keep the entry
+   * locally).
+   */
+  saveAvailabilityToBackend: (availability: Availability) => Promise<void>;
+  /**
+   * Asks the backend for matches; falls back to the local algorithm if the
+   * backend is offline. Returns the resulting match list.
+   */
+  fetchMatches: () => Promise<Match[]>;
+  /**
+   * Creates a fresh user — backend-first, with local fallback. Used by the
+   * onboarding ``LoginScreen``. The created user becomes the current user.
+   */
+  registerUser: (payload: { pseudonym: string; email: string }) => Promise<User>;
+  addAvailability: (availability: Availability) => void;
+  replaceMyAvailabilities: (list: Availability[]) => void;
+  recomputeMatches: () => Match[];
+  updateMatch: (id: string, patch: Partial<Match>) => void;
+  confirmMatch: (matchId: string) => Meeting | null;
+  cancelMatch: (matchId: string) => void;
+  sendChatMessage: (matchId: string, text: string) => { ok: boolean; reason?: string; warnings?: string[] };
+  /**
+   * Real QR check-in. The QR payload is a signed JWT the backend issued at
+   * meeting creation. Backend verifies token + meeting + participant, then
+   * marks the authenticated user as checked in. Falls back to local-only
+   * simulation when the backend is unreachable.
+   *
+   * Returns ``{ok: true}`` on success; ``{ok: false, reason}`` on validation
+   * failure so the scanner screen can show a useful message.
+   */
+  checkInToMeeting: (meetingId: string, qrToken: string) => Promise<{ ok: boolean; reason?: string }>;
+  /** Demo-only helper: marks the other participant as checked in locally. */
+  simulateOtherUserCheckIn: (meetingId: string, userId: string) => void;
+  cancelMeeting: (meetingId: string) => void;
+  markMeetingNoShow: (meetingId: string) => void;
+  registerSelfNoShow: () => void;
+  getCafe: (id: string) => Cafe | undefined;
+  getUser: (id: string) => User | undefined;
+  getMeetingByMatch: (matchId: string) => Meeting | undefined;
+}
+
+const AppContext = createContext<AppContextValue | null>(null);
+
+export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [state, dispatch] = useReducer(reducer, initialState);
+
+  const [authBootstrapping, setAuthBootstrapping] = useState(true);
+
+  const setCurrentUser = useCallback((user: User | null) => {
+    dispatch({ type: 'SET_USER', user });
+  }, []);
+
+  const updateUser = useCallback((patch: Partial<User>) => {
+    dispatch({ type: 'UPDATE_USER', patch });
+  }, []);
+
+  // On launch: restore the saved bearer token (if any) and re-fetch the user
+  // through /api/auth/me. If the token is invalid or the backend is down we
+  // simply land on the onboarding screen — nothing destructive.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const stored = await restoreToken();
+      if (!stored) {
+        if (!cancelled) setAuthBootstrapping(false);
+        return;
+      }
+      try {
+        const apiUser = await authApi.me();
+        if (cancelled) return;
+        const user = apiUserToLocal(apiUser);
+        dispatch({ type: 'SET_USER', user });
+        // Pull the user's saved availability so the RootNavigator knows they
+        // already completed onboarding.
+        const list = await backendLoadAvailabilities(user.id).catch(() => null);
+        if (!cancelled && list && list.length > 0) {
+          dispatch({ type: 'REPLACE_AVAILABILITIES', userId: user.id, list });
+        }
+        // Fire-and-forget; safe on web (no-op) and on simulators.
+        registerPushTokenForCurrentUser().catch(() => null);
+      } catch (err) {
+        // Invalid/expired token — drop it.
+        if (!isApiUnavailable(err)) {
+          await setToken(null);
+        }
+      } finally {
+        if (!cancelled) setAuthBootstrapping(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const signUp = useCallback(
+    async (payload: { pseudonym: string; email: string; password: string }): Promise<User> => {
+      try {
+        const res = await authApi.register(payload);
+        await setToken(res.token);
+        const user = apiUserToLocal(res.user);
+        dispatch({ type: 'SET_USER', user });
+        registerPushTokenForCurrentUser().catch(() => null);
+        return user;
+      } catch (err) {
+        if (isApiUnavailable(err)) {
+          const error: AuthError = {
+            code: 'network',
+            message: 'Backend nicht erreichbar — bitte später nochmal versuchen.',
+          };
+          throw error;
+        }
+        if (err instanceof ApiError && err.status === 409) {
+          throw { code: 'email_taken', message: 'Diese E-Mail ist bereits registriert.' } as AuthError;
+        }
+        throw {
+          code: 'unknown',
+          message: err instanceof Error ? err.message : 'Registrierung fehlgeschlagen.',
+        } as AuthError;
+      }
+    },
+    [],
+  );
+
+  const signIn = useCallback(
+    async (payload: { email: string; password: string }): Promise<User> => {
+      try {
+        const res = await authApi.login(payload);
+        await setToken(res.token);
+        const user = apiUserToLocal(res.user);
+        dispatch({ type: 'SET_USER', user });
+        // Hydrate availability so the user lands on Home, not Onboarding.
+        const list = await backendLoadAvailabilities(user.id).catch(() => null);
+        if (list && list.length > 0) {
+          dispatch({ type: 'REPLACE_AVAILABILITIES', userId: user.id, list });
+        }
+        registerPushTokenForCurrentUser().catch(() => null);
+        return user;
+      } catch (err) {
+        if (isApiUnavailable(err)) {
+          throw { code: 'network', message: 'Backend nicht erreichbar.' } as AuthError;
+        }
+        if (err instanceof ApiError && err.status === 401) {
+          throw {
+            code: 'invalid_credentials',
+            message: 'E-Mail oder Passwort stimmt nicht.',
+          } as AuthError;
+        }
+        throw {
+          code: 'unknown',
+          message: err instanceof Error ? err.message : 'Login fehlgeschlagen.',
+        } as AuthError;
+      }
+    },
+    [],
+  );
+
+  const signOut = useCallback(async (): Promise<void> => {
+    // Clear backend token before nuking auth so the call is still authenticated.
+    await clearPushTokenForCurrentUser();
+    await setToken(null);
+    dispatch({ type: 'SET_USER', user: null });
+  }, []);
+
+  const registerUser = useCallback(
+    async (payload: { pseudonym: string; email: string }): Promise<User> => {
+      const fromBackend = await backendCreateUser(payload).catch(() => null);
+      const user = fromBackend ?? mockRegister(payload);
+      dispatch({ type: 'SET_USER', user });
+      return user;
+    },
+    [],
+  );
+
+  const saveUserToBackend = useCallback(
+    async (patch: Partial<User>): Promise<void> => {
+      // Always update local state immediately.
+      dispatch({ type: 'UPDATE_USER', patch });
+      if (!state.currentUser) return;
+      const updated = await backendUpdateUser(state.currentUser.id, patch).catch(() => null);
+      if (updated) {
+        // Keep canonical id/initials from backend in sync.
+        dispatch({ type: 'SET_USER', user: updated });
+      }
+    },
+    [state.currentUser],
+  );
+
+  const saveAvailabilityToBackend = useCallback(
+    async (availability: Availability): Promise<void> => {
+      // Local state update first — the UI stays responsive even on slow networks.
+      dispatch({ type: 'REPLACE_AVAILABILITIES', userId: availability.userId, list: [availability] });
+      const persisted = await backendSaveAvailability(availability).catch(() => null);
+      if (persisted) {
+        // Replace the local entry with the one carrying the backend id.
+        dispatch({ type: 'REPLACE_AVAILABILITIES', userId: persisted.userId, list: [persisted] });
+      }
+    },
+    [],
+  );
+
+  const addAvailability = useCallback((availability: Availability) => {
+    dispatch({ type: 'ADD_AVAILABILITY', availability });
+  }, []);
+
+  const replaceMyAvailabilities = useCallback(
+    (list: Availability[]) => {
+      if (!state.currentUser) return;
+      dispatch({ type: 'REPLACE_AVAILABILITIES', userId: state.currentUser.id, list });
+    },
+    [state.currentUser],
+  );
+
+  const recomputeMatches = useCallback((): Match[] => {
+    if (!state.currentUser) return [];
+    const myAvailabilities = state.availabilities.filter((a) => a.userId === state.currentUser!.id);
+    if (myAvailabilities.length === 0) {
+      dispatch({ type: 'SET_MATCHES', matches: [] });
+      return [];
+    }
+    const candidates = state.users
+      .filter((u) => u.id !== state.currentUser!.id)
+      .flatMap((u) =>
+        state.availabilities
+          .filter((a) => a.userId === u.id)
+          .map((a) => ({ user: u, availability: a })),
+      );
+
+    const result = findMatches({
+      user: state.currentUser,
+      myAvailabilities,
+      candidates,
+      cafes: state.cafes,
+    });
+
+    // Carry over status of any matches we'd already confirmed/declined.
+    const merged = result.map((m) => {
+      const existing = state.matches.find(
+        (e) => e.userBId === m.userBId && e.suggestedDate === m.suggestedDate,
+      );
+      if (existing) return { ...m, id: existing.id, status: existing.status };
+      return m;
+    });
+
+    dispatch({ type: 'SET_MATCHES', matches: merged });
+    return merged;
+  }, [state.currentUser, state.users, state.availabilities, state.cafes, state.matches]);
+
+  const fetchMatches = useCallback(async (): Promise<Match[]> => {
+    if (!state.currentUser) return [];
+    const fromBackend = await backendFindMatches(state.currentUser.id).catch(() => null);
+    if (fromBackend && fromBackend.length > 0) {
+      // Keep statuses we'd already locally accepted/declined.
+      const merged = fromBackend.map((m) => {
+        const existing = state.matches.find(
+          (e) => e.userBId === m.userBId && e.suggestedDate === m.suggestedDate,
+        );
+        return existing ? { ...m, id: existing.id, status: existing.status } : m;
+      });
+      dispatch({ type: 'SET_MATCHES', matches: merged });
+      return merged;
+    }
+    // Backend offline or empty — fall back to the local matcher.
+    return recomputeMatches();
+  }, [state.currentUser, state.matches, recomputeMatches]);
+
+  const updateMatch = useCallback((id: string, patch: Partial<Match>) => {
+    dispatch({ type: 'UPDATE_MATCH', id, patch });
+  }, []);
+
+  const confirmMatch = useCallback(
+    (matchId: string): Meeting | null => {
+      const match = state.matches.find((m) => m.id === matchId);
+      if (!match) return null;
+      const meeting = createMeeting(match);
+      const seedMessages = createSeedMessages(match.id, match.userBId);
+      dispatch({ type: 'UPDATE_MATCH', id: matchId, patch: { status: 'accepted' } });
+      dispatch({ type: 'ADD_MEETING', meeting, seedMessages });
+      return meeting;
+    },
+    [state.matches],
+  );
+
+  const cancelMatch = useCallback((matchId: string) => {
+    dispatch({ type: 'UPDATE_MATCH', id: matchId, patch: { status: 'declined' } });
+  }, []);
+
+  const sendChatMessage = useCallback(
+    (matchId: string, text: string) => {
+      if (!state.currentUser) return { ok: false, reason: 'Nicht eingeloggt.' };
+      const result = sendMessage({
+        messages: state.chatMessages,
+        matchId,
+        senderId: state.currentUser.id,
+        text,
+      });
+      if (result.ok && result.message) {
+        dispatch({ type: 'ADD_MESSAGE', message: result.message });
+      }
+      return { ok: result.ok, reason: result.reason, warnings: result.warnings };
+    },
+    [state.chatMessages, state.currentUser],
+  );
+
+  const checkInToMeeting = useCallback(
+    async (
+      meetingId: string,
+      qrToken: string,
+    ): Promise<{ ok: boolean; reason?: string }> => {
+      const meeting = state.meetings.find((m) => m.id === meetingId);
+      if (!meeting) return { ok: false, reason: 'Treffen nicht gefunden.' };
+      if (!state.currentUser) return { ok: false, reason: 'Nicht angemeldet.' };
+
+      const result = await backendCheckInMeeting(meetingId, qrToken).catch(() => null);
+
+      if (result === null) {
+        // Backend unreachable — fall back to local-only simulation. We still
+        // require the token to at least equal the meeting's stored QR so the
+        // mock flow validates the camera roundtrip.
+        if (qrToken !== meeting.qrCode) {
+          return { ok: false, reason: 'QR-Code passt nicht zu diesem Treffen.' };
+        }
+        const updated = simulateCheckIn(meeting, state.currentUser.id);
+        dispatch({ type: 'UPDATE_MEETING', id: meetingId, meeting: updated });
+        return { ok: true };
+      }
+
+      if (!result.ok) return { ok: false, reason: result.reason };
+
+      dispatch({ type: 'UPDATE_MEETING', id: meetingId, meeting: result.meeting });
+      return { ok: true };
+    },
+    [state.meetings, state.currentUser],
+  );
+
+  const simulateOtherUserCheckIn = useCallback(
+    (meetingId: string, userId: string) => {
+      const meeting = state.meetings.find((m) => m.id === meetingId);
+      if (!meeting) return;
+      const updated = simulateCheckIn(meeting, userId);
+      dispatch({ type: 'UPDATE_MEETING', id: meetingId, meeting: updated });
+    },
+    [state.meetings],
+  );
+
+  const cancelMeeting = useCallback(
+    (meetingId: string) => {
+      const meeting = state.meetings.find((m) => m.id === meetingId);
+      if (!meeting) return;
+      dispatch({
+        type: 'UPDATE_MEETING',
+        id: meetingId,
+        meeting: { ...meeting, status: 'cancelled' },
+      });
+    },
+    [state.meetings],
+  );
+
+  const markMeetingNoShow = useCallback(
+    (meetingId: string) => {
+      const meeting = state.meetings.find((m) => m.id === meetingId);
+      if (!meeting) return;
+      const updated = recomputeStatusFromCheckIns({ ...meeting, status: 'no_show' });
+      dispatch({ type: 'UPDATE_MEETING', id: meetingId, meeting: updated });
+    },
+    [state.meetings],
+  );
+
+  const registerSelfNoShow = useCallback(() => {
+    if (!state.currentUser) return;
+    dispatch({ type: 'REGISTER_NO_SHOW', userId: state.currentUser.id });
+  }, [state.currentUser]);
+
+  const getCafe = useCallback((id: string) => state.cafes.find((c) => c.id === id), [state.cafes]);
+  const getUser = useCallback((id: string) => state.users.find((u) => u.id === id), [state.users]);
+  const getMeetingByMatch = useCallback(
+    (matchId: string) => state.meetings.find((m) => m.matchId === matchId),
+    [state.meetings],
+  );
+
+  const value = useMemo<AppContextValue>(
+    () => ({
+      ...state,
+      authBootstrapping,
+      signUp,
+      signIn,
+      signOut,
+      setCurrentUser,
+      updateUser,
+      registerUser,
+      saveUserToBackend,
+      saveAvailabilityToBackend,
+      fetchMatches,
+      addAvailability,
+      replaceMyAvailabilities,
+      recomputeMatches,
+      updateMatch,
+      confirmMatch,
+      cancelMatch,
+      sendChatMessage,
+      checkInToMeeting,
+      simulateOtherUserCheckIn,
+      cancelMeeting,
+      markMeetingNoShow,
+      registerSelfNoShow,
+      getCafe,
+      getUser,
+      getMeetingByMatch,
+    }),
+    [
+      state,
+      authBootstrapping,
+      signUp,
+      signIn,
+      signOut,
+      setCurrentUser,
+      updateUser,
+      registerUser,
+      saveUserToBackend,
+      saveAvailabilityToBackend,
+      fetchMatches,
+      addAvailability,
+      replaceMyAvailabilities,
+      recomputeMatches,
+      updateMatch,
+      confirmMatch,
+      cancelMatch,
+      sendChatMessage,
+      checkInToMeeting,
+      simulateOtherUserCheckIn,
+      cancelMeeting,
+      markMeetingNoShow,
+      registerSelfNoShow,
+      getCafe,
+      getUser,
+      getMeetingByMatch,
+    ],
+  );
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+};
+
+export function useApp(): AppContextValue {
+  const ctx = useContext(AppContext);
+  if (!ctx) throw new Error('useApp must be used inside AppStateProvider');
+  return ctx;
+}
