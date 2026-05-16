@@ -27,4 +27,6 @@ export type RootStackParamList = {
   AvailabilityEdit: undefined;
   Icebreakers: { matchId: string };
   Safety: undefined;
+  MeetingReschedule: { meetingId: string };
+  ProfileEdit: undefined;
 };

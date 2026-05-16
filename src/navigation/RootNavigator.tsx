@@ -11,6 +11,8 @@ import NoShowScreen from '../screens/NoShowScreen';
 import AvailabilityEditScreen from '../screens/AvailabilityEditScreen';
 import IcebreakerScreen from '../screens/IcebreakerScreen';
 import SafetyPrivacyScreen from '../screens/SafetyPrivacyScreen';
+import MeetingRescheduleScreen from '../screens/MeetingRescheduleScreen';
+import ProfileEditScreen from '../screens/ProfileEditScreen';
 import { useApp } from '../store/AppContext';
 import { colors } from '../theme';
 
@@ -56,6 +58,8 @@ const RootNavigator: React.FC = () => {
             options={{ presentation: 'card' }}
           />
           <Stack.Screen name="Safety" component={SafetyPrivacyScreen} />
+          <Stack.Screen name="MeetingReschedule" component={MeetingRescheduleScreen} />
+          <Stack.Screen name="ProfileEdit" component={ProfileEditScreen} />
         </>
       )}
     </Stack.Navigator>
