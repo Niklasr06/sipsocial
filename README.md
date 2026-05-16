@@ -39,6 +39,7 @@ SipSocial/
 │   │   ├── apiClient.ts         # Zentraler fetch-Wrapper + Bearer-Header
 │   │   ├── authApi.ts           # /register, /login, /me
 │   │   ├── tokenStore.ts        # AsyncStorage-basiertes Token-Caching
+│   │   ├── pushService.ts       # Expo-Notifications: Permission + Token-Reg.
 │   │   └── ...
 │   ├── store/AppContext.tsx     # zentraler App-State + Auth-Bootstrap
 │   ├── theme/                   # Farben, Typo, Spacing
@@ -61,12 +62,13 @@ SipSocial/
         ├── models/              # Re-Exports der Pydantic-Modelle
         ├── schemas/             # Pydantic-Schemas (API + DB)
         ├── services/            # Domain-Logik
-        │   ├── auth_service.py        # bcrypt + JWT-Helper
+        │   ├── auth_service.py        # bcrypt + Session-JWT + QR-Token-JWT
         │   ├── cafe_service.py        # Google Places (v1) + Cache
         │   ├── chat_service.py        # Fernet-verschlüsselter Chat
         │   ├── icebreaker_service.py  # Fragen nach Interessen
         │   ├── matching_service.py    # Score-Berechnung
         │   ├── meeting_service.py
+        │   ├── notification_service.py # Expo Push Gateway
         │   ├── privacy_filter.py      # Regex-Schutz
         │   ├── repo.py                # date/time-Helper für asyncpg
         │   └── ...
@@ -108,6 +110,27 @@ Im Expo-CLI-Terminal:
 
 > Auf restriktiven Netzwerken (z. B. Uni-WLAN) hilft `npx expo start --tunnel`
 > oder ein Handy-Hotspot, an dem sich der Mac anmeldet.
+
+### Auf dem Handy testen (Expo Go)
+
+Wenn die App auf dem Handy „Backend nicht erreichbar" meldet, ist meist
+einer dieser drei Punkte das Problem:
+
+1. **LAN-IP statt `localhost`:** Auf dem Smartphone ist `localhost` das
+   Telefon selbst — nicht dein Mac. Trag in `.env` die LAN-IP deines Macs
+   ein, z. B.:
+   ```env
+   EXPO_PUBLIC_API_URL=http://192.168.178.42:8000
+   ```
+   Die IP findest du mit `ipconfig getifaddr en0`.
+2. **Backend an `0.0.0.0` binden** (siehe „Backend lokal starten") —
+   nur dann ist es im LAN erreichbar.
+3. **macOS-Firewall:** Beim ersten Start fragt macOS „Eingehende
+   Verbindungen für Python erlauben?" → **Erlauben**. Sonst sieht dein
+   Handy den Mac nicht.
+
+Schnelltest am Handy: im Browser `http://<mac-lan-ip>:8000/api/health`
+öffnen. Liefert das `{"ok":true,...}`, klappt's auch in der App.
 
 ---
 
@@ -174,7 +197,11 @@ BACKEND_CORS_ORIGINS=http://localhost:8081,http://localhost:8082,http://localhos
 Server starten:
 
 ```bash
+# nur vom Mac aus erreichbar
 uvicorn main:app --reload
+
+# fürs Testen mit dem Handy im selben WLAN: auf 0.0.0.0 binden
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 Die API läuft auf `http://localhost:8000/api/...`. Status:
@@ -253,12 +280,12 @@ Alle Endpunkte unter `/api/...`:
 | Bereich       | Endpunkte                                                                 |
 | ------------- | ------------------------------------------------------------------------- |
 | **Auth**      | `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`     |
-| User          | `POST/GET/PATCH /api/users[/{id}]`                                        |
+| User          | `POST/GET/PATCH /api/users[/{id}]`, `PUT /api/users/me/push-token`        |
 | Profile       | `POST/GET/PATCH /api/profiles[/{user_id}]`                                |
 | Availability  | `POST /api/availability`, `GET /api/availability/{user_id}`               |
 | Matching      | `POST /api/matches/find`, `GET /api/matches/{user_id}`, `PATCH /api/matches/{id}/status` |
 | Cafés         | `GET /api/cafes/search`, `/api/cafes/nearby`, `/api/cafes/{id}`           |
-| Meetings      | `POST/GET/PATCH /api/meetings[/{id}]`                                     |
+| Meetings      | `POST/GET/PATCH /api/meetings[/{id}]`, `POST /api/meetings/{id}/check-in` |
 | Chat          | `GET /api/chat/{match_id}`, `POST /api/chat/{match_id}/message`           |
 | Icebreaker    | `GET /api/chat/{match_id}/icebreakers`                                    |
 | Health        | `GET /api/health`                                                         |
@@ -328,6 +355,35 @@ OpenAPI-Doku läuft automatisch auf `http://localhost:8000/docs`.
 - Auf dem Café-Vorschlagsscreen kann der Nutzer per Button neue Cafés in
   der Nähe suchen lassen.
 
+### 10. QR-Check-In mit signiertem Token
+- Backend signiert beim Anlegen eines Meetings einen JWT
+  (`purpose: "qr_checkin"`, 24 h Gültigkeit) und legt ihn als `qr_code` ab.
+- Frontend rendert daraus einen **echten scanbaren QR** (`react-native-qrcode-svg`).
+- „QR-Code scannen" öffnet die Kamera via `expo-camera`. Der gescannte
+  Token geht an `POST /api/meetings/{id}/check-in` (Bearer-Auth).
+- Backend validiert Signatur + Meeting-ID + Teilnehmerschaft. Sobald
+  beide gescannt haben, wechselt der Meeting-Status auf
+  `both_checked_in`.
+- Bei offline-Backend: lokaler Fallback, der zumindest prüft, ob der
+  gescannte Token dem Meeting-QR entspricht.
+
+### 11. Push-Notifications (nativ)
+- Backend speichert pro User einen `expo_push_token` und schickt Pushes
+  via Expo's Public Push Gateway (`exp.host/--/api/v2/push/send`).
+- Trigger:
+  - **Match angenommen** (`PATCH /matches/{id}/status` → `accepted`) → die
+    andere Seite bekommt „X möchte mit dir auf einen Kaffee."
+  - **Treffen bestätigt** (`POST /meetings`) → Push mit Café-Name.
+  - **Chat-Nachricht** (nicht blockiert) → Push mit Pseudonym + Vorschau.
+- Frontend (`src/services/pushService.ts`):
+  - holt sich die Permission, ruft `getExpoPushTokenAsync` und meldet
+    den Token via `PUT /api/users/me/push-token` an.
+  - Beim Logout wird der Token serverseitig wieder geleert.
+  - **Nur nativ.** Web-Push ist nicht implementiert (Expo unterstützt es
+    nicht out-of-the-box); im Browser werden Pushes silently übersprungen.
+- Tap-Routing in [`App.tsx`](App.tsx) leitet je nach `data.type` zum
+  Chat, zur Matches-Liste oder zum QR-Check-In.
+
 ---
 
 ## Demo-Flow
@@ -336,14 +392,20 @@ OpenAPI-Doku läuft automatisch auf `http://localhost:8000/docs`.
 2. Profil einrichten → Interessen → Verfügbarkeit speichern
 3. Auf Home erscheinen Matches — auf einen tippen → Café-Vorschlag → Karte
    mit echten Google-Cafés → Café wählen → Treffen bestätigen
-4. QR-Check-in (selbst + Match simulieren) → „Beide eingecheckt"
+4. QR-Check-in: **„QR-Code scannen"** öffnet die Kamera → richte sie auf
+   den QR-Code → eingecheckt. (Nativ am Handy am komfortabelsten.)
 5. Chat öffnen → 3 Nachrichten schreiben → Filter testet z. B. mit:
    *„Schreib mir auf Instagram @niki"* (wird geblockt)
 6. Icebreaker-Button oben rechts → Fragen passend zu Interessen, „Nächste
    Frage" wechselt durch
 7. Profil → **Abmelden** → erneut **Anmelden** → User + Verfügbarkeit
    bleiben dank Neon erhalten
-8. Im Profil-Tab → „No-Show simulieren" testet das Eskalations-System
+8. Im Profil-Tab → „Sicherheit & Datenschutz" + „Vertrauensstatus" zeigen
+   das No-Show-System
+
+Für Push-Notifications-Demo: zweites Gerät (oder Browser-Tab) als Match
+nutzen — sobald die andere Seite Chat schickt oder das Treffen bestätigt,
+poppt am Handy ein Banner auf.
 
 ---
 
@@ -354,18 +416,24 @@ OpenAPI-Doku läuft automatisch auf `http://localhost:8000/docs`.
 | `/api/health` zeigt `db_error`                         | `DATABASE_URL` falsch, oder Neon-Compute pausiert (im Neon-Dashboard wecken)  |
 | Google Places liefert nur Mock-Cafés                   | Backend-Log prüfen — meistens `403 blocked` (siehe Key-Restriktionen oben)    |
 | Backend startet, `health` ok, aber CORS-Fehler im Web  | Frontend-Origin in `BACKEND_CORS_ORIGINS` ergänzen                            |
+| App am Handy: „Backend nicht erreichbar"               | Siehe „Auf dem Handy testen" — LAN-IP in `.env`, Backend an `0.0.0.0`, macOS-Firewall erlauben |
 | `401` auf geschütztem Endpunkt                         | Token abgelaufen → ausloggen + neu anmelden, oder `JWT_EXPIRES_HOURS` höher   |
 | Expo zeigt weißen Screen                               | Browser-Console öffnen — typisch ist ein fehlendes `npm install`              |
 | `bcrypt`-Fehler beim Login                             | bcrypt ≥ 4.3 nutzen (`pip install -U bcrypt`)                                 |
+| QR-Scan reagiert nicht                                 | Kamera-Permission erteilt? Im Web manchmal blockiert → am Handy via Expo Go testen |
+| Push-Notifications kommen nicht                        | Funktioniert nur auf echten Geräten (kein Simulator, kein Web), Permission „Erlauben" erforderlich |
 
 ---
 
 ## Bekannte Vereinfachungen
 
-- Der QR-Code im Frontend ist ein deterministischer Designer-Platzhalter —
-  echtes Scannen/Verifizieren fehlt noch.
 - Im Mock-Only-Modus persistiert das Backend keine Schreibvorgänge.
 - Der Google-Places-Cache läuft nie ab; in Produktion sollte ein TTL ergänzt
   werden.
-- Keine Push-Notifications (nur In-App-State).
+- **Push-Notifications nur nativ.** Web-Push würde Service-Worker + VAPID
+  brauchen — bewusst weggelassen für den MVP.
+- Pro User nur **ein** Expo-Push-Token (eine Geräteinstallation). Mehrere
+  Devices pro User würden eine eigene Tabelle brauchen.
 - Kein Refresh-Token-Flow; abgelaufene JWTs erfordern Re-Login.
+- QR-Tokens werden auch nach erfolgreichem Check-In nicht invalidiert —
+  Re-Scans während des 24-h-Fensters wären weiter möglich.
