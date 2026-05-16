@@ -2,6 +2,34 @@
 -- Idempotent: each statement uses IF NOT EXISTS so initialization can run
 -- on every startup without erroring against an already-populated cluster.
 
+-- Long-lived refresh tokens, used to mint fresh access JWTs without forcing
+-- a re-login. We store the SHA-256 hash so a leaked DB dump can't be
+-- replayed against the API. ``revoked_at`` lets us invalidate a single
+-- token on logout.
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  token_hash  TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at  TIMESTAMPTZ NOT NULL,
+  revoked_at  TIMESTAMPTZ,
+  last_used_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS refresh_tokens_user ON refresh_tokens (user_id);
+CREATE INDEX IF NOT EXISTS refresh_tokens_active
+  ON refresh_tokens (user_id) WHERE revoked_at IS NULL;
+
+-- Single-use password reset tokens. Hashed so a leaked DB dump can't
+-- be used to reset arbitrary user passwords.
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  token_hash  TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at  TIMESTAMPTZ NOT NULL,
+  used_at     TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS password_reset_tokens_user
+  ON password_reset_tokens (user_id) WHERE used_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS users (
   id                  TEXT PRIMARY KEY,
   pseudonym           TEXT NOT NULL,

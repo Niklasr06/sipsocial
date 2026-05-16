@@ -4,6 +4,8 @@ export type OnboardingStackParamList = {
   Onboarding: undefined;
   Register: undefined;
   Login: undefined;
+  PasswordResetRequest: undefined;
+  PasswordResetConfirm: { email?: string } | undefined;
   ProfileSetup: undefined;
   Interests: undefined;
   Availability: { fromOnboarding?: boolean } | undefined;

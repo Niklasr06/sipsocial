@@ -1,5 +1,5 @@
 import { apiConfig, apiUrl } from '../config/apiConfig';
-import { getToken } from './tokenStore';
+import { getRefreshToken, getToken, setTokens } from './tokenStore';
 
 export class ApiUnavailableError extends Error {
   constructor(message = 'Backend ist nicht erreichbar.') {
@@ -25,15 +25,49 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
-async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
-  if (!apiConfig.isBackendEnabled) {
-    throw new ApiUnavailableError('EXPO_PUBLIC_API_URL nicht gesetzt — Backend deaktiviert.');
-  }
+// Coalesce concurrent refreshes — if 5 requests fail with 401 at once, only
+// one /auth/refresh call should fire, and the others wait on that promise.
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function attemptRefresh(): Promise<boolean> {
+  if (refreshInFlight) return refreshInFlight;
+  const rt = getRefreshToken();
+  if (!rt) return false;
+
+  refreshInFlight = (async () => {
+    try {
+      const res = await fetch(apiUrl('/api/auth/refresh'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ refresh_token: rt }),
+      });
+      if (!res.ok) {
+        // Refresh failed → drop both tokens so the next render shows onboarding.
+        await setTokens(null, null);
+        return false;
+      }
+      const data = (await res.json().catch(() => null)) as
+        | { token?: string; refresh_token?: string }
+        | null;
+      if (!data?.token || !data?.refresh_token) {
+        await setTokens(null, null);
+        return false;
+      }
+      await setTokens(data.token, data.refresh_token);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
+}
+
+async function doFetch(path: string, opts: RequestOptions): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), apiConfig.requestTimeoutMs);
 
-  // Attach the bearer token whenever we have one. Keeps unauthenticated
-  // endpoints (register/login/health) working — the backend just ignores it.
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
@@ -41,16 +75,27 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  let res: Response;
   try {
-    res = await fetch(apiUrl(path), {
+    return await fetch(apiUrl(path), {
       method: opts.method ?? 'GET',
       headers,
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
       signal: opts.signal ?? controller.signal,
     });
-  } catch (err) {
+  } finally {
     clearTimeout(timeout);
+  }
+}
+
+async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  if (!apiConfig.isBackendEnabled) {
+    throw new ApiUnavailableError('EXPO_PUBLIC_API_URL nicht gesetzt — Backend deaktiviert.');
+  }
+
+  let res: Response;
+  try {
+    res = await doFetch(path, opts);
+  } catch (err) {
     if ((err as { name?: string })?.name === 'AbortError') {
       throw new ApiUnavailableError('Backend antwortet nicht (Timeout).');
     }
@@ -58,7 +103,22 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
       'Backend nicht erreichbar — läuft uvicorn? Fällt automatisch auf lokale Daten zurück.',
     );
   }
-  clearTimeout(timeout);
+
+  // 401 + we have a refresh token → try once, then retry the original request.
+  // We deliberately don't auto-refresh on the /auth/* routes to avoid loops.
+  if (res.status === 401 && !path.startsWith('/api/auth/') && getRefreshToken()) {
+    const refreshed = await attemptRefresh();
+    if (refreshed) {
+      try {
+        res = await doFetch(path, opts);
+      } catch (err) {
+        if ((err as { name?: string })?.name === 'AbortError') {
+          throw new ApiUnavailableError('Backend antwortet nicht (Timeout).');
+        }
+        throw new ApiUnavailableError('Backend nicht erreichbar.');
+      }
+    }
+  }
 
   const contentType = res.headers.get('content-type') ?? '';
   const data = contentType.includes('application/json')

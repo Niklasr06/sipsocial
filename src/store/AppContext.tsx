@@ -32,7 +32,7 @@ import { authApi } from '../services/authApi';
 import { availabilityApi } from '../services/availabilityApi';
 import { meetingApi } from '../services/meetingApi';
 import { ApiError, isApiUnavailable } from '../services/apiClient';
-import { restoreToken, setToken } from '../services/tokenStore';
+import { getRefreshToken, restoreToken, setTokens } from '../services/tokenStore';
 import { clearPushTokenForCurrentUser, registerPushTokenForCurrentUser } from '../services/pushService';
 
 interface AppState {
@@ -234,9 +234,9 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         // Fire-and-forget; safe on web (no-op) and on simulators.
         registerPushTokenForCurrentUser().catch(() => null);
       } catch (err) {
-        // Invalid/expired token — drop it.
+        // Invalid/expired token — drop both.
         if (!isApiUnavailable(err)) {
-          await setToken(null);
+          await setTokens(null, null);
         }
       } finally {
         if (!cancelled) setAuthBootstrapping(false);
@@ -251,7 +251,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     async (payload: { pseudonym: string; email: string; password: string }): Promise<User> => {
       try {
         const res = await authApi.register(payload);
-        await setToken(res.token);
+        await setTokens(res.token, res.refresh_token);
         const user = apiUserToLocal(res.user);
         dispatch({ type: 'SET_USER', user });
         registerPushTokenForCurrentUser().catch(() => null);
@@ -280,7 +280,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     async (payload: { email: string; password: string }): Promise<User> => {
       try {
         const res = await authApi.login(payload);
-        await setToken(res.token);
+        await setTokens(res.token, res.refresh_token);
         const user = apiUserToLocal(res.user);
         dispatch({ type: 'SET_USER', user });
         // Hydrate availability so the user lands on Home, not Onboarding.
@@ -310,9 +310,18 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   );
 
   const signOut = useCallback(async (): Promise<void> => {
-    // Clear backend token before nuking auth so the call is still authenticated.
+    // Clear backend push token and revoke the refresh token while we're
+    // still authenticated; then drop both tokens locally.
     await clearPushTokenForCurrentUser();
-    await setToken(null);
+    const rt = getRefreshToken();
+    if (rt) {
+      try {
+        await authApi.logout(rt);
+      } catch {
+        // best-effort
+      }
+    }
+    await setTokens(null, null);
     dispatch({ type: 'SET_USER', user: null });
   }, []);
 

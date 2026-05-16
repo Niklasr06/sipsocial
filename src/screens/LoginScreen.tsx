@@ -89,6 +89,15 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
         />
 
         <Pressable
+          onPress={() => navigation.navigate('PasswordResetRequest')}
+          style={({ pressed }) => [styles.forgotLink, pressed && { opacity: 0.7 }]}
+        >
+          <Text style={[typography.small, { color: colors.primary, fontWeight: '600' }]}>
+            Passwort vergessen?
+          </Text>
+        </Pressable>
+
+        <Pressable
           onPress={() => navigation.navigate('Register')}
           style={({ pressed }) => [styles.switchLink, pressed && { opacity: 0.7 }]}
         >
@@ -123,6 +132,11 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     alignSelf: 'center',
     paddingVertical: spacing.sm,
+  },
+  forgotLink: {
+    marginTop: spacing.md,
+    alignSelf: 'center',
+    paddingVertical: spacing.xs,
   },
 });
 

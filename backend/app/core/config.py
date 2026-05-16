@@ -15,7 +15,13 @@ class Settings(BaseSettings):
     # JWT secret for session tokens. Generate with:
     #   python -c 'import secrets; print(secrets.token_urlsafe(48))'
     JWT_SECRET: str = ""
-    JWT_EXPIRES_HOURS: int = 24 * 7  # one week default
+    # Access-token lifetime. Kept short — clients use the refresh token
+    # (server-side, rotated) to mint a new access token on 401.
+    JWT_EXPIRES_HOURS: int = 1
+    # Refresh-token lifetime. 90 days is the practical max — past that the
+    # user re-logs in. Tokens rotate on each /auth/refresh call so even a
+    # leaked token only works once.
+    REFRESH_TOKEN_DAYS: int = 90
 
     @property
     def cors_origins(self) -> List[str]:

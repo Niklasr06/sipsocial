@@ -17,4 +17,24 @@ class LoginRequest(BaseModel):
 class AuthResponse(BaseModel):
     token: str
     token_type: str = "bearer"
+    refresh_token: str
     user: User
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class RefreshResponse(BaseModel):
+    token: str
+    token_type: str = "bearer"
+    refresh_token: str
+
+
+class PasswordResetRequest(BaseModel):
+    email: str = Field(pattern=EMAIL_PATTERN, max_length=254)
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(min_length=8, max_length=200)
+    new_password: str = Field(min_length=8, max_length=128)
