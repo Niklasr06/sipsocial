@@ -23,32 +23,49 @@ def _row_to_availability(row) -> Availability:
 
 
 async def add_availability(payload: AvailabilityCreate) -> Availability:
+    """Append an availability slot. Multiple slots per user are now allowed."""
     pool = get_pool()
     item = Availability(id=new_id("av"), **payload.model_dump())
     if pool is None:
         return item
 
     async with pool.acquire() as conn:
-        async with conn.transaction():
-            # Replace the user's existing availability (single-slot model).
-            await conn.execute("DELETE FROM availabilities WHERE user_id = $1", payload.user_id)
-            row = await conn.fetchrow(
-                """
-                INSERT INTO availabilities
-                    (id, user_id, date, start_time, end_time, area, lat, lng)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                RETURNING *
-                """,
-                item.id,
-                payload.user_id,
-                to_date(payload.date),
-                to_time(payload.start_time),
-                to_time(payload.end_time),
-                payload.area,
-                payload.lat,
-                payload.lng,
-            )
+        row = await conn.fetchrow(
+            """
+            INSERT INTO availabilities
+                (id, user_id, date, start_time, end_time, area, lat, lng)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING *
+            """,
+            item.id,
+            payload.user_id,
+            to_date(payload.date),
+            to_time(payload.start_time),
+            to_time(payload.end_time),
+            payload.area,
+            payload.lat,
+            payload.lng,
+        )
     return _row_to_availability(row)
+
+
+async def delete_one(availability_id: str, user_id: str) -> bool:
+    """Delete a single slot. Returns True if anything was removed.
+
+    The ``user_id`` is a guard so a user can't nuke someone else's slot —
+    even though the auth layer already checks the bearer subject, paired
+    DB-level check keeps this safe under future endpoint changes.
+    """
+    pool = get_pool()
+    if pool is None:
+        return False
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            "DELETE FROM availabilities WHERE id = $1 AND user_id = $2",
+            availability_id, user_id,
+        )
+    # asyncpg returns 'DELETE n' as the status string.
+    return result.endswith(" 0") is False
 
 
 async def get_for_user(user_id: str) -> List[Availability]:

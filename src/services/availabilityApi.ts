@@ -15,4 +15,6 @@ export const availabilityApi = {
   add: (payload: Omit<ApiAvailability, 'id'>) =>
     apiClient.post<ApiAvailability>('/api/availability', payload),
   forUser: (userId: string) => apiClient.get<ApiAvailability[]>(`/api/availability/${userId}`),
+  remove: (availabilityId: string) =>
+    apiClient.del<void>(`/api/availability/${availabilityId}`),
 };

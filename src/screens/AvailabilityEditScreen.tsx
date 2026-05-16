@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
@@ -8,7 +8,7 @@ import { colors, fonts, radius, spacing, typography } from '../theme';
 import { useApp } from '../store/AppContext';
 import { AREAS } from '../data/interests';
 import { Area, Availability } from '../types';
-import { addDaysIso, formatDateShort, todayIso, toMinutes } from '../utils/date';
+import { addDaysIso, formatDateLong, formatTimeRange, todayIso, toMinutes } from '../utils/date';
 import { createId } from '../utils/id';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AvailabilityEdit'>;
@@ -16,23 +16,41 @@ type Props = NativeStackScreenProps<RootStackParamList, 'AvailabilityEdit'>;
 const TIME_SLOTS = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'];
 
 const AvailabilityEditScreen: React.FC<Props> = ({ navigation }) => {
-  const { currentUser, availabilities, saveAvailabilityToBackend, fetchMatches } = useApp();
+  const {
+    currentUser,
+    availabilities,
+    saveAvailabilityToBackend,
+    removeAvailability,
+    fetchMatches,
+  } = useApp();
   const dates = useMemo(() => Array.from({ length: 7 }, (_, i) => addDaysIso(todayIso(), i)), []);
-  const existing = currentUser ? availabilities.find((a) => a.userId === currentUser.id) : undefined;
+  const myAvailabilities = useMemo(
+    () =>
+      currentUser
+        ? availabilities
+            .filter((a) => a.userId === currentUser.id)
+            .sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date)))
+        : [],
+    [availabilities, currentUser],
+  );
 
-  const [selectedDate, setSelectedDate] = useState(existing?.date ?? dates[1]);
-  const [startTime, setStartTime] = useState(existing?.startTime ?? '15:00');
-  const [endTime, setEndTime] = useState(existing?.endTime ?? '17:00');
-  const [area, setArea] = useState<Area>((existing?.area as Area) ?? 'Stuttgart-Mitte');
+  const [selectedDate, setSelectedDate] = useState(dates[1]);
+  const [startTime, setStartTime] = useState('15:00');
+  const [endTime, setEndTime] = useState('17:00');
+  const [area, setArea] = useState<Area>('Stuttgart-Mitte');
   const [submitting, setSubmitting] = useState(false);
 
   const isValidRange = toMinutes(endTime) > toMinutes(startTime);
+  // Soft guard: prevent obvious duplicate slots (same day + same start).
+  const isDuplicate = myAvailabilities.some(
+    (a) => a.date === selectedDate && a.startTime === startTime && a.area === area,
+  );
 
-  const onSubmit = async () => {
-    if (!currentUser || !isValidRange || submitting) return;
+  const onAdd = async () => {
+    if (!currentUser || !isValidRange || submitting || isDuplicate) return;
     setSubmitting(true);
     const av: Availability = {
-      id: existing?.id ?? createId('av'),
+      id: createId('av'),
       userId: currentUser.id,
       date: selectedDate,
       startTime,
@@ -42,16 +60,76 @@ const AvailabilityEditScreen: React.FC<Props> = ({ navigation }) => {
     await saveAvailabilityToBackend(av);
     fetchMatches().catch(() => undefined);
     setSubmitting(false);
-    navigation.goBack();
+  };
+
+  const onDelete = (av: Availability) => {
+    const doDelete = () => {
+      removeAvailability(av.id);
+      fetchMatches().catch(() => undefined);
+    };
+    if (Platform.OS === 'web') {
+      // RN Web's Alert.alert is a no-op — fall back to native confirm.
+      // eslint-disable-next-line no-alert
+      if (typeof window !== 'undefined' && window.confirm('Verfügbarkeit wirklich löschen?')) {
+        doDelete();
+      }
+      return;
+    }
+    Alert.alert(
+      'Verfügbarkeit löschen?',
+      `${formatDateLong(av.date)}, ${formatTimeRange(av.startTime, av.endTime)} · ${av.area}`,
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Löschen', style: 'destructive', onPress: doDelete },
+      ],
+    );
   };
 
   return (
     <Screen>
-      <Header onBack={() => navigation.goBack()} title="Verfügbarkeit ändern" />
+      <Header onBack={() => navigation.goBack()} title="Verfügbarkeit" />
       <Text style={styles.headline}>Wann passt es dir?</Text>
-      <Text style={styles.subline}>Tag, Uhrzeit und Bereich. Neue Vorschläge werden direkt aktualisiert.</Text>
+      <Text style={styles.subline}>
+        Du kannst mehrere Zeitfenster hinterlegen — jedes findet eigene Match-Vorschläge.
+      </Text>
 
-      <Text style={[typography.caption, styles.label]}>Tag</Text>
+      <Text style={[typography.caption, styles.label]}>Meine Verfügbarkeiten ({myAvailabilities.length})</Text>
+      {myAvailabilities.length === 0 ? (
+        <Card tone="cream" padding="md">
+          <Text style={[typography.body, { color: colors.textSecondary }]}>
+            Noch nichts hinterlegt. Fülle unten dein erstes Zeitfenster aus.
+          </Text>
+        </Card>
+      ) : (
+        <View style={{ gap: spacing.sm }}>
+          {myAvailabilities.map((av) => (
+            <Card key={av.id} tone="white" padding="md">
+              <View style={styles.slotRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[typography.bodyStrong, { color: colors.textDark }]}>
+                    {formatDateLong(av.date)}
+                  </Text>
+                  <Text style={[typography.small, { color: colors.textSecondary, marginTop: 2 }]}>
+                    {formatTimeRange(av.startTime, av.endTime)} · {av.area}
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => onDelete(av)}
+                  hitSlop={10}
+                  style={styles.deleteBtn}
+                  accessibilityLabel="Verfügbarkeit löschen"
+                >
+                  <Ionicons name="trash-outline" size={20} color={colors.error} />
+                </Pressable>
+              </View>
+            </Card>
+          ))}
+        </View>
+      )}
+
+      <Text style={[typography.caption, styles.label]}>Neues Zeitfenster hinzufügen</Text>
+
+      <Text style={[typography.caption, styles.subLabel]}>Tag</Text>
       <View style={styles.dateRow}>
         {dates.map((d) => {
           const selected = d === selectedDate;
@@ -62,7 +140,7 @@ const AvailabilityEditScreen: React.FC<Props> = ({ navigation }) => {
               style={[styles.dateCell, selected && styles.dateCellSelected]}
             >
               <Text style={[typography.small, { color: selected ? '#fff' : colors.textSecondary }]}>
-                {formatDateShort(d).split(',')[0]}
+                {formatDateLong(d).split(',')[0].slice(0, 2)}
               </Text>
               <Text
                 style={[
@@ -77,7 +155,7 @@ const AvailabilityEditScreen: React.FC<Props> = ({ navigation }) => {
         })}
       </View>
 
-      <Text style={[typography.caption, styles.label]}>Zeitfenster</Text>
+      <Text style={[typography.caption, styles.subLabel]}>Zeitfenster</Text>
       <Card tone="white" padding="md">
         <View style={styles.timeRow}>
           <View style={styles.timeBlock}>
@@ -104,20 +182,34 @@ const AvailabilityEditScreen: React.FC<Props> = ({ navigation }) => {
         </View>
       </Card>
 
-      <Text style={[typography.caption, styles.label]}>Bereich</Text>
+      <Text style={[typography.caption, styles.subLabel]}>Bereich</Text>
       <View style={styles.chipsWrap}>
         {AREAS.map((a) => (
           <Chip key={a} label={a} selected={area === a} onPress={() => setArea(a)} />
         ))}
       </View>
 
+      {isDuplicate ? (
+        <Text style={[typography.small, { color: colors.error, marginTop: spacing.md }]}>
+          Dieses Zeitfenster hast du schon eingetragen.
+        </Text>
+      ) : null}
+
       <Button
-        label={submitting ? 'Speichere…' : 'Speichern'}
-        onPress={onSubmit}
+        label={submitting ? 'Speichere…' : 'Zeitfenster hinzufügen'}
+        onPress={onAdd}
         loading={submitting}
-        disabled={!isValidRange || submitting}
+        disabled={!isValidRange || submitting || isDuplicate}
         fullWidth
-        style={{ marginTop: spacing.xxl }}
+        style={{ marginTop: spacing.lg }}
+        iconLeft={!submitting ? <Ionicons name="add-circle-outline" size={18} color="#fff" /> : null}
+      />
+      <Button
+        label="Fertig"
+        variant="secondary"
+        onPress={() => navigation.goBack()}
+        fullWidth
+        style={{ marginTop: spacing.sm, marginBottom: spacing.xxl }}
       />
     </Screen>
   );
@@ -132,7 +224,17 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   subline: { ...typography.body, color: colors.textSecondary, marginTop: spacing.sm },
-  label: { color: colors.textSecondary, marginTop: spacing.xl, marginBottom: spacing.sm },
+  label: { color: colors.textSecondary, marginTop: spacing.xl, marginBottom: spacing.sm, fontWeight: '700' },
+  subLabel: { color: colors.textSecondary, marginTop: spacing.lg, marginBottom: spacing.sm },
+  slotRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  deleteBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(196, 73, 73, 0.10)',
+  },
   dateRow: { flexDirection: 'row', gap: spacing.sm },
   dateCell: {
     flex: 1,

@@ -19,6 +19,7 @@ import { registerNoShow } from '../services/noShowService';
 import { createProfile } from '../services/profileService';
 import { createSeedMessages } from '../data/mockMessages';
 import {
+  apiMeetingToLocal,
   apiUserToLocal,
   backendCheckInMeeting,
   backendCreateUser,
@@ -28,6 +29,8 @@ import {
   backendUpdateUser,
 } from './backendBridge';
 import { authApi } from '../services/authApi';
+import { availabilityApi } from '../services/availabilityApi';
+import { meetingApi } from '../services/meetingApi';
 import { ApiError, isApiUnavailable } from '../services/apiClient';
 import { restoreToken, setToken } from '../services/tokenStore';
 import { clearPushTokenForCurrentUser, registerPushTokenForCurrentUser } from '../services/pushService';
@@ -47,6 +50,7 @@ type Action =
   | { type: 'UPDATE_USER'; patch: Partial<User> }
   | { type: 'ADD_AVAILABILITY'; availability: Availability }
   | { type: 'REPLACE_AVAILABILITIES'; userId: string; list: Availability[] }
+  | { type: 'REMOVE_AVAILABILITY'; id: string }
   | { type: 'SET_MATCHES'; matches: Match[] }
   | { type: 'UPDATE_MATCH'; id: string; patch: Partial<Match> }
   | { type: 'ADD_MEETING'; meeting: Meeting; seedMessages?: ChatMessage[] }
@@ -79,6 +83,11 @@ function reducer(state: AppState, action: Action): AppState {
       const others = state.availabilities.filter((a) => a.userId !== action.userId);
       return { ...state, availabilities: [...others, ...action.list] };
     }
+    case 'REMOVE_AVAILABILITY':
+      return {
+        ...state,
+        availabilities: state.availabilities.filter((a) => a.id !== action.id),
+      };
     case 'SET_MATCHES':
       return { ...state, matches: action.matches };
     case 'UPDATE_MATCH':
@@ -137,6 +146,8 @@ export interface AppContextValue extends AppState {
    * locally).
    */
   saveAvailabilityToBackend: (availability: Availability) => Promise<void>;
+  /** Delete one of the current user's availability slots (backend + local). */
+  removeAvailability: (availabilityId: string) => Promise<void>;
   /**
    * Asks the backend for matches; falls back to the local algorithm if the
    * backend is offline. Returns the resulting match list.
@@ -166,7 +177,16 @@ export interface AppContextValue extends AppState {
   checkInToMeeting: (meetingId: string, qrToken: string) => Promise<{ ok: boolean; reason?: string }>;
   /** Demo-only helper: marks the other participant as checked in locally. */
   simulateOtherUserCheckIn: (meetingId: string, userId: string) => void;
-  cancelMeeting: (meetingId: string) => void;
+  /** Cancel a confirmed meeting. Persists to backend, pushes the other side. */
+  cancelMeeting: (meetingId: string) => Promise<void>;
+  /**
+   * Move a meeting to a new time / café. Returns ``{ok: false, reason}`` on
+   * authoritative backend errors so the caller can surface them inline.
+   */
+  rescheduleMeeting: (
+    meetingId: string,
+    patch: { date?: string; startTime?: string; endTime?: string; cafeId?: string },
+  ) => Promise<{ ok: boolean; reason?: string }>;
   markMeetingNoShow: (meetingId: string) => void;
   registerSelfNoShow: () => void;
   getCafe: (id: string) => Cafe | undefined;
@@ -322,12 +342,30 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const saveAvailabilityToBackend = useCallback(
     async (availability: Availability): Promise<void> => {
-      // Local state update first — the UI stays responsive even on slow networks.
-      dispatch({ type: 'REPLACE_AVAILABILITIES', userId: availability.userId, list: [availability] });
+      // Append-only model: the backend supports multiple slots per user, so
+      // we add to local state immediately and reconcile with the persisted
+      // version (its id may differ from the optimistic one).
+      dispatch({ type: 'ADD_AVAILABILITY', availability });
       const persisted = await backendSaveAvailability(availability).catch(() => null);
       if (persisted) {
-        // Replace the local entry with the one carrying the backend id.
-        dispatch({ type: 'REPLACE_AVAILABILITIES', userId: persisted.userId, list: [persisted] });
+        dispatch({ type: 'REMOVE_AVAILABILITY', id: availability.id });
+        dispatch({ type: 'ADD_AVAILABILITY', availability: persisted });
+      }
+    },
+    [],
+  );
+
+  const removeAvailability = useCallback(
+    async (availabilityId: string): Promise<void> => {
+      dispatch({ type: 'REMOVE_AVAILABILITY', id: availabilityId });
+      // Best-effort persistence; offline removal stays local-only.
+      try {
+        await availabilityApi.remove(availabilityId);
+      } catch (err) {
+        if (!isApiUnavailable(err)) {
+          // eslint-disable-next-line no-console
+          console.warn('[availability] backend delete failed:', err);
+        }
       }
     },
     [],
@@ -478,14 +516,62 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   );
 
   const cancelMeeting = useCallback(
-    (meetingId: string) => {
+    async (meetingId: string): Promise<void> => {
       const meeting = state.meetings.find((m) => m.id === meetingId);
       if (!meeting) return;
+      // Optimistic local update; backend confirms or no-ops if offline.
       dispatch({
         type: 'UPDATE_MEETING',
         id: meetingId,
         meeting: { ...meeting, status: 'cancelled' },
       });
+      try {
+        const updated = await meetingApi.update(meetingId, { status: 'cancelled' });
+        dispatch({ type: 'UPDATE_MEETING', id: meetingId, meeting: apiMeetingToLocal(updated) });
+      } catch (err) {
+        if (!isApiUnavailable(err)) {
+          // eslint-disable-next-line no-console
+          console.warn('[meeting] cancel failed:', err);
+        }
+      }
+    },
+    [state.meetings],
+  );
+
+  const rescheduleMeeting = useCallback(
+    async (
+      meetingId: string,
+      patch: { date?: string; startTime?: string; endTime?: string; cafeId?: string },
+    ): Promise<{ ok: boolean; reason?: string }> => {
+      const meeting = state.meetings.find((m) => m.id === meetingId);
+      if (!meeting) return { ok: false, reason: 'Treffen nicht gefunden.' };
+      const apiPatch = {
+        date: patch.date,
+        start_time: patch.startTime,
+        end_time: patch.endTime,
+        cafe_id: patch.cafeId,
+      };
+      // Local optimistic update.
+      dispatch({
+        type: 'UPDATE_MEETING',
+        id: meetingId,
+        meeting: {
+          ...meeting,
+          date: patch.date ?? meeting.date,
+          startTime: patch.startTime ?? meeting.startTime,
+          endTime: patch.endTime ?? meeting.endTime,
+          cafeId: patch.cafeId ?? meeting.cafeId,
+        },
+      });
+      try {
+        const updated = await meetingApi.update(meetingId, apiPatch);
+        dispatch({ type: 'UPDATE_MEETING', id: meetingId, meeting: apiMeetingToLocal(updated) });
+        return { ok: true };
+      } catch (err) {
+        if (isApiUnavailable(err)) return { ok: true }; // Local-only succeeded.
+        if (err instanceof ApiError) return { ok: false, reason: err.detail ?? err.message };
+        return { ok: false, reason: err instanceof Error ? err.message : 'Unbekannter Fehler.' };
+      }
     },
     [state.meetings],
   );
@@ -524,6 +610,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       registerUser,
       saveUserToBackend,
       saveAvailabilityToBackend,
+      removeAvailability,
       fetchMatches,
       addAvailability,
       replaceMyAvailabilities,
@@ -535,6 +622,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       checkInToMeeting,
       simulateOtherUserCheckIn,
       cancelMeeting,
+      rescheduleMeeting,
       markMeetingNoShow,
       registerSelfNoShow,
       getCafe,
@@ -552,6 +640,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       registerUser,
       saveUserToBackend,
       saveAvailabilityToBackend,
+      removeAvailability,
       fetchMatches,
       addAvailability,
       replaceMyAvailabilities,
@@ -563,6 +652,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       checkInToMeeting,
       simulateOtherUserCheckIn,
       cancelMeeting,
+      rescheduleMeeting,
       markMeetingNoShow,
       registerSelfNoShow,
       getCafe,

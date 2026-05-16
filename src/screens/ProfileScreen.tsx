@@ -21,7 +21,10 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const { currentUser, availabilities, signOut } = useApp();
   if (!currentUser) return null;
 
-  const myAv = availabilities.find((a) => a.userId === currentUser.id);
+  const myAvs = availabilities
+    .filter((a) => a.userId === currentUser.id)
+    .sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date)));
+  const nextAv = myAvs[0];
   const trust = calculateTrustStatus(currentUser.noShowCount);
 
   const onLogout = async () => {
@@ -94,19 +97,26 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 
       <Card tone="cream" padding="md" style={{ marginTop: spacing.md }}>
         <View style={styles.cardHeader}>
-          <Text style={[typography.caption, { color: colors.textSecondary }]}>Aktuelle Verfügbarkeit</Text>
+          <Text style={[typography.caption, { color: colors.textSecondary }]}>
+            Verfügbarkeiten ({myAvs.length})
+          </Text>
           <Pressable onPress={() => navigation.navigate('AvailabilityEdit')}>
-            <Text style={[typography.small, { color: colors.primary, fontWeight: '600' }]}>Ändern</Text>
+            <Text style={[typography.small, { color: colors.primary, fontWeight: '600' }]}>Verwalten</Text>
           </Pressable>
         </View>
-        {myAv ? (
+        {nextAv ? (
           <>
             <Text style={[typography.bodyStrong, { color: colors.textDark, marginTop: 4 }]}>
-              {formatDateLong(myAv.date)}
+              {formatDateLong(nextAv.date)}
             </Text>
             <Text style={[typography.small, { color: colors.textSecondary, marginTop: 2 }]}>
-              {formatTimeRange(myAv.startTime, myAv.endTime)} · {myAv.area}
+              {formatTimeRange(nextAv.startTime, nextAv.endTime)} · {nextAv.area}
             </Text>
+            {myAvs.length > 1 ? (
+              <Text style={[typography.small, { color: colors.textMuted, marginTop: 6 }]}>
+                + {myAvs.length - 1} weitere
+              </Text>
+            ) : null}
           </>
         ) : (
           <Text style={[typography.body, { color: colors.textSecondary }]}>Keine Verfügbarkeit hinterlegt.</Text>
@@ -124,11 +134,18 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 
       <View style={{ marginTop: spacing.xxl, gap: spacing.sm }}>
         <Button
-          label="Verfügbarkeit ändern"
+          label="Profil bearbeiten"
           variant="primary"
           fullWidth
+          onPress={() => navigation.navigate('ProfileEdit')}
+          iconLeft={<Ionicons name="create-outline" size={18} color="#fff" />}
+        />
+        <Button
+          label="Verfügbarkeit verwalten"
+          variant="secondary"
+          fullWidth
           onPress={() => navigation.navigate('AvailabilityEdit')}
-          iconLeft={<Ionicons name="calendar-outline" size={18} color="#fff" />}
+          iconLeft={<Ionicons name="calendar-outline" size={18} color={colors.textDark} />}
         />
         <Button
           label="Vertrauensstatus ansehen"
