@@ -29,6 +29,7 @@ export const AREAS = [
   'Böblingen',
   'Esslingen',
   'Ludwigsburg',
+  'Reutlingen',
 ] as const;
 
 export const AGE_RANGES = ['18-24', '25-34', '35-44', '45+'] as const;

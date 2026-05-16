@@ -37,6 +37,7 @@ GOOGLE_FIELD_MASK = ",".join(
         "places.location",
         "places.rating",
         "places.types",
+        "places.primaryType",
         "places.regularOpeningHours.weekdayDescriptions",
     ]
 )
@@ -50,6 +51,7 @@ AREA_CENTERS: dict[str, tuple[float, float]] = {
     "Böblingen": (48.6852, 9.0117),
     "Esslingen": (48.7395, 9.3060),
     "Ludwigsburg": (48.8975, 9.1929),
+    "Reutlingen": (48.4914, 9.2043),
 }
 
 
@@ -193,9 +195,12 @@ async def _fetch_google_places(
         "X-Goog-Api-Key": api_key,
         "X-Goog-FieldMask": GOOGLE_FIELD_MASK,
     }
+    # Ask Google for the API's hard max (20). After filtering out
+    # tankstellen/eishallen we keep up to ``limit`` of the survivors,
+    # so over-fetching ensures we don't end up with too few real cafés.
     body = {
-        "includedTypes": ["cafe"],
-        "maxResultCount": min(max(limit, 1), 20),
+        "includedTypes": ["cafe", "coffee_shop", "bakery"],
+        "maxResultCount": 20,
         "locationRestriction": {
             "circle": {
                 "center": {"latitude": lat, "longitude": lng},
@@ -216,10 +221,25 @@ async def _fetch_google_places(
 
     data = resp.json()
     out: list[Cafe] = []
-    for place in (data.get("places") or [])[:limit]:
+    for place in data.get("places") or []:
         place_id = place.get("id")
         if not place_id:
             continue
+        types = set(place.get("types") or [])
+        primary = place.get("primaryType") or ""
+
+        # Strictest signal first: the place's *primary* type must be
+        # something coffee-ish. This kills hotels, restaurants, bars and
+        # tankstellen even when Google offers ``cafe`` as a secondary type.
+        if primary and primary not in _CAFE_LIKE:
+            continue
+        # Backup for the rare result without a primary type at all.
+        if not primary:
+            if types & _NOT_A_CAFE:
+                continue
+            if not (types & _CAFE_LIKE):
+                continue
+
         loc = place.get("location") or {}
         rlat = float(loc.get("latitude", lat))
         rlng = float(loc.get("longitude", lng))
@@ -236,7 +256,7 @@ async def _fetch_google_places(
             rating=float(place.get("rating", 0.0) or 0.0),
             atmosphere=[
                 t for t in (place.get("types") or [])
-                if t not in {"cafe", "point_of_interest", "establishment", "food", "store"}
+                if t not in _BORING_TYPES
             ][:3],
             distance_mock="",
             emoji="☕️",
@@ -244,7 +264,46 @@ async def _fetch_google_places(
             source="google",
         )
         out.append(cafe)
+        if len(out) >= limit:
+            break
     return out
+
+
+# A place qualifies as café-ish only if at least one of these is in its types.
+_CAFE_LIKE = {
+    "cafe",
+    "coffee_shop",
+    "bakery",  # a lot of German "Konditoreien" sit here and serve coffee on tables
+    "pastry_shop",
+    "tea_house",
+    "dessert_shop",
+}
+
+# If any of these are present, it's not really a café — Google sometimes
+# fits ``cafe`` as a secondary type onto gas stations, ice rinks, hotels…
+_NOT_A_CAFE = {
+    "gas_station",
+    "ice_skating_rink",
+    "indoor_playground",
+    "lodging",
+    "hotel",
+    "convenience_store",
+    "supermarket",
+    "car_wash",
+    "movie_theater",
+    "fast_food_restaurant",
+}
+
+# Types that aren't useful as "atmosphere" tags in the UI.
+_BORING_TYPES = {
+    "cafe",
+    "coffee_shop",
+    "point_of_interest",
+    "establishment",
+    "food",
+    "store",
+    "food_store",
+}
 
 
 async def get_by_place_id(place_id: str) -> Optional[Cafe]:

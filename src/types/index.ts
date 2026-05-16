@@ -11,7 +11,8 @@ export type Area =
   | 'Stuttgart-Vaihingen'
   | 'Böblingen'
   | 'Esslingen'
-  | 'Ludwigsburg';
+  | 'Ludwigsburg'
+  | 'Reutlingen';
 
 export interface PrivacySettings {
   hideExactAge: boolean;
