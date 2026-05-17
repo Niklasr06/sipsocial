@@ -1,22 +1,18 @@
 export const ALL_INTERESTS: { label: string; emoji: string }[] = [
-  // Coffee / Lifestyle
+  // Essen & Trinken
   { label: 'Kaffee', emoji: '☕️' },
   { label: 'Kochen', emoji: '🍳' },
   { label: 'Backen', emoji: '🧁' },
   { label: 'Restaurants', emoji: '🍽️' },
   { label: 'Wein', emoji: '🍷' },
-  { label: 'Craft Beer', emoji: '🍺' },
 
-  // Outdoor / Sport
+  // Outdoor & Sport
   { label: 'Reisen', emoji: '🌍' },
   { label: 'Wandern', emoji: '🥾' },
   { label: 'Radfahren', emoji: '🚴' },
   { label: 'Sport', emoji: '🏃' },
-  { label: 'Yoga', emoji: '🧘' },
   { label: 'Fitness', emoji: '💪' },
-  { label: 'Fußball', emoji: '⚽️' },
-  { label: 'Klettern', emoji: '🧗' },
-  { label: 'Skifahren', emoji: '⛷️' },
+  { label: 'Yoga', emoji: '🧘' },
   { label: 'Natur', emoji: '🌿' },
 
   // Kultur
@@ -25,38 +21,26 @@ export const ALL_INTERESTS: { label: string; emoji: string }[] = [
   { label: 'Filme', emoji: '🎬' },
   { label: 'Serien', emoji: '📺' },
   { label: 'Bücher', emoji: '📚' },
-  { label: 'Theater', emoji: '🎭' },
-  { label: 'Museen', emoji: '🏛️' },
   { label: 'Kunst', emoji: '🎨' },
   { label: 'Fotografie', emoji: '📷' },
   { label: 'Mode', emoji: '👗' },
 
-  // Tech / Wissen
+  // Tech & Wissen
   { label: 'Startups', emoji: '🚀' },
   { label: 'Technologie', emoji: '💡' },
   { label: 'KI', emoji: '🤖' },
-  { label: 'Programmieren', emoji: '💻' },
   { label: 'Gaming', emoji: '🎮' },
-  { label: 'Studium', emoji: '🎓' },
-  { label: 'Business', emoji: '💼' },
-  { label: 'Finanzen', emoji: '📈' },
   { label: 'Wissenschaft', emoji: '🔬' },
-  { label: 'Geschichte', emoji: '📜' },
-  { label: 'Philosophie', emoji: '🤔' },
   { label: 'Psychologie', emoji: '🧠' },
 
-  // Soziales / Werte
-  { label: 'Politik', emoji: '🗳️' },
-  { label: 'Nachhaltigkeit', emoji: '🌱' },
+  // Soziales & Werte
   { label: 'Sprachen', emoji: '🗣️' },
-  { label: 'Religion', emoji: '🙏' },
+  { label: 'Nachhaltigkeit', emoji: '🌱' },
   { label: 'Ehrenamt', emoji: '❤️' },
 
   // Hobbies
-  { label: 'Tanzen', emoji: '💃' },
   { label: 'Brettspiele', emoji: '🎲' },
-  { label: 'DIY / Basteln', emoji: '🛠️' },
-  { label: 'Gartenarbeit', emoji: '🌻' },
+  { label: 'Tanzen', emoji: '💃' },
   { label: 'Haustiere', emoji: '🐾' },
 ];
 
