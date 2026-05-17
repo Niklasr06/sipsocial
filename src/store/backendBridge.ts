@@ -114,7 +114,13 @@ export async function backendUpdateUser(userId: string, patch: Partial<User>): P
     const apiUser = await userApi.update(userId, localUserPatchToApi(patch) as Partial<ApiUser>);
     return apiUserToLocal(apiUser);
   } catch (err) {
-    if (isApiUnavailable(err)) return null;
+    if (isApiUnavailable(err)) {
+      // eslint-disable-next-line no-console
+      console.warn('[backend] user update timed out / unreachable — local state ahead of DB:', err);
+      return null;
+    }
+    // eslint-disable-next-line no-console
+    console.error('[backend] user update failed:', err);
     throw err;
   }
 }

@@ -13,7 +13,11 @@ export const apiConfig = {
   baseUrl: cleanedBase,
   isBackendEnabled: cleanedBase.length > 0,
   googleMapsApiKey: (process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? '').trim(),
-  requestTimeoutMs: 8000,
+  // 45s deckt Render Free Tier Cold-Starts ab (Dyno schläft nach 15 Min,
+  // braucht 30–50s zum Aufwachen). Sonst werden die ersten Calls nach
+  // einer Pause silently als ApiUnavailableError verworfen — siehe Bug
+  // wo Profil-Daten lokal "gespeichert" waren aber DB leer blieb.
+  requestTimeoutMs: 45000,
 } as const;
 
 export function apiUrl(path: string): string {
