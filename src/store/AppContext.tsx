@@ -31,6 +31,7 @@ import {
 import { authApi } from '../services/authApi';
 import { availabilityApi } from '../services/availabilityApi';
 import { meetingApi } from '../services/meetingApi';
+import { userApi } from '../services/userApi';
 import { ApiError, isApiUnavailable } from '../services/apiClient';
 import { getRefreshToken, restoreToken, setTokens } from '../services/tokenStore';
 import { clearPushTokenForCurrentUser, registerPushTokenForCurrentUser } from '../services/pushService';
@@ -138,6 +139,13 @@ export interface AppContextValue extends AppState {
   signIn: (payload: { email: string; password: string }) => Promise<{ user: User; hasAvailability: boolean }>;
   /** Clears the session and returns the navigator to the onboarding stack. */
   signOut: () => Promise<void>;
+  /**
+   * Permanently delete the user's account on the backend, then sign out
+   * locally. DSGVO Art. 17 (right to erasure). Caller should confirm
+   * intent in a destructive dialog before calling this — there is no
+   * undo on either side.
+   */
+  deleteAccount: () => Promise<void>;
   setCurrentUser: (user: User | null) => void;
   updateUser: (patch: Partial<User>) => void;
   /**
@@ -328,6 +336,23 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       } catch {
         // best-effort
       }
+    }
+    await setTokens(null, null);
+    dispatch({ type: 'SET_USER', user: null });
+  }, []);
+
+  const deleteAccount = useCallback(async (): Promise<void> => {
+    // DELETE läuft authenticated — Token muss noch da sein. Backend
+    // cascadet alle abhängigen Daten (availabilities, matches, meetings,
+    // chats, blocks, reports, auth-tokens). Lokal danach gleicher
+    // Cleanup wie bei signOut.
+    try {
+      await userApi.deleteMe();
+    } catch (err) {
+      // Selbst wenn der Backend-Call fehlschlägt: lokal ausloggen, sonst
+      // wirkt es als ob nichts passiert. Der User kann's nochmal probieren.
+      // eslint-disable-next-line no-console
+      console.warn('[delete] backend delete failed, signing out locally:', err);
     }
     await setTokens(null, null);
     dispatch({ type: 'SET_USER', user: null });
@@ -622,6 +647,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       signUp,
       signIn,
       signOut,
+      deleteAccount,
       setCurrentUser,
       updateUser,
       registerUser,
@@ -652,6 +678,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       signUp,
       signIn,
       signOut,
+      deleteAccount,
       setCurrentUser,
       updateUser,
       registerUser,

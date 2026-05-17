@@ -235,6 +235,34 @@ async def get_push_token(user_id: str) -> Optional[str]:
         )
 
 
+async def delete_user(user_id: str) -> bool:
+    """Permanently delete a user and everything attached to them.
+
+    Most child tables (availabilities, matches, meetings, chat_messages,
+    icebreakers, blocks, reports) cascade automatically thanks to the
+    ``ON DELETE CASCADE`` foreign keys on ``users(id)``. The auth-token
+    tables don't have an FK to users (they pre-date the user table in
+    some setups), so we delete them explicitly.
+
+    Returns ``True`` if a row was removed, ``False`` if the user was
+    already gone — both are user-visible "success" from the caller's POV.
+    """
+    pool = get_pool()
+    if pool is None:
+        return False
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                "DELETE FROM refresh_tokens WHERE user_id = $1", user_id,
+            )
+            await conn.execute(
+                "DELETE FROM password_reset_tokens WHERE user_id = $1", user_id,
+            )
+            result = await conn.execute("DELETE FROM users WHERE id = $1", user_id)
+    # asyncpg returns 'DELETE n' as the status string
+    return not result.endswith(" 0")
+
+
 async def adjust_no_show(user_id: str, delta: int = 1) -> Optional[User]:
     pool = get_pool()
     if pool is None:

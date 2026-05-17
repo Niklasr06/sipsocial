@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -18,7 +18,7 @@ type Props = CompositeScreenProps<
 >;
 
 const ProfileScreen: React.FC<Props> = ({ navigation }) => {
-  const { currentUser, availabilities, signOut } = useApp();
+  const { currentUser, availabilities, signOut, deleteAccount } = useApp();
   if (!currentUser) return null;
 
   const myAvs = availabilities
@@ -28,9 +28,27 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const trust = calculateTrustStatus(currentUser.noShowCount);
 
   const onLogout = async () => {
-    // Clears the stored bearer token + resets the user. Root navigator switches
-    // back to the onboarding stack automatically.
     await signOut();
+  };
+
+  const onDeleteAccount = () => {
+    const doDelete = () => {
+      void deleteAccount();
+    };
+    const title = 'Account wirklich löschen?';
+    const body =
+      'Dein Profil, alle Matches, Chats, Treffen, Blockierungen und Meldungen werden unwiderruflich gelöscht. Du kannst dich danach erneut registrieren — aber die Daten sind weg.';
+    if (Platform.OS === 'web') {
+      // eslint-disable-next-line no-alert
+      if (typeof window !== 'undefined' && window.confirm(`${title}\n\n${body}`)) {
+        doDelete();
+      }
+      return;
+    }
+    Alert.alert(title, body, [
+      { text: 'Abbrechen', style: 'cancel' },
+      { text: 'Endgültig löschen', style: 'destructive', onPress: doDelete },
+    ]);
   };
 
   return (
@@ -161,6 +179,9 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           iconLeft={<Ionicons name="shield-checkmark-outline" size={18} color={colors.textDark} />}
         />
         <Button label="Abmelden" variant="ghost" fullWidth onPress={onLogout} />
+        <Pressable onPress={onDeleteAccount} style={styles.deleteLink} hitSlop={8}>
+          <Text style={styles.deleteLinkText}>Account löschen</Text>
+        </Pressable>
       </View>
     </Screen>
   );
@@ -202,6 +223,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 8,
+  },
+  deleteLink: {
+    alignSelf: 'center',
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  deleteLinkText: {
+    ...typography.small,
+    color: colors.error,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 });
 

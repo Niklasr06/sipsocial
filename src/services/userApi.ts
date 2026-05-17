@@ -27,4 +27,6 @@ export const userApi = {
   /** Stores (or clears with ``null``) the Expo push token for the bearer-auth'd user. */
   setPushToken: (token: string | null) =>
     apiClient.put<void>('/api/users/me/push-token', { token }),
+  /** Permanently delete the caller's account (DSGVO right to erasure). */
+  deleteMe: () => apiClient.del<void>('/api/users/me'),
 };
