@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useCallback } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { OnboardingStackParamList } from '../navigation/types';
 import { Button, Card, Screen } from '../components';
 import { colors, fonts, radius, spacing, typography } from '../theme';
@@ -36,16 +37,20 @@ const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
   const { currentUser, authBootstrapping } = useApp();
 
   // Returning user with stored token + unvollständigem Profil landet sonst
-  // hier auf dem Intro statt im ProfileSetup. Sobald /me durch ist, leiten
-  // wir um. (Wer fertig ist, sieht den Screen eh nicht — RootNavigator
-  // hat dann schon zum Main-Stack umgeschaltet.)
-  useEffect(() => {
-    if (authBootstrapping) return;
-    if (!currentUser) return;
-    if (currentUser.interests.length < 3) {
-      navigation.replace('ProfileSetup');
-    }
-  }, [authBootstrapping, currentUser, navigation]);
+  // hier auf dem Intro statt im ProfileSetup. ``useFocusEffect`` statt
+  // ``useEffect``, weil React Navigation Vorgänger-Screens mounted hält —
+  // ein nacktes useEffect würde sonst auch dann feuern, wenn der User schon
+  // einen Schritt weiter ist und gerade speichert, und uns mit
+  // navigation.replace zurück nach ProfileSetup ziehen.
+  useFocusEffect(
+    useCallback(() => {
+      if (authBootstrapping) return;
+      if (!currentUser) return;
+      if (currentUser.interests.length < 3) {
+        navigation.replace('ProfileSetup');
+      }
+    }, [authBootstrapping, currentUser, navigation]),
+  );
 
   return (
     <Screen padded={false}>
