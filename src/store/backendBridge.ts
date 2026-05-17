@@ -16,8 +16,12 @@ import { ApiCheckIn, ApiMeeting, meetingApi } from '../services/meetingApi';
 import { ApiError, isApiUnavailable } from '../services/apiClient';
 
 export function apiUserToLocal(u: ApiUser): User {
+  // Defensive: backend used to serialize the primary key as ``_id`` (a
+  // MongoDB-alias leftover). Old deployments still in flight may return
+  // that — fall back gracefully so the ``id`` never becomes ``undefined``.
+  const id = u.id ?? (u as unknown as { _id?: string })._id ?? '';
   return {
-    id: u.id,
+    id,
     pseudonym: u.pseudonym,
     email: u.email,
     ageRange: u.age_range,

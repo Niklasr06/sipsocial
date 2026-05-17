@@ -31,14 +31,17 @@ class CafeLocation(BaseModel):
 
 
 class BaseDocument(BaseModel):
-    """Pydantic base for documents returned from MongoDB.
+    """Pydantic base for persisted objects returned from the API.
 
-    Allows population by either alias ``_id`` or field name ``id``.
+    Plain ``id`` field — the leftover ``_id`` alias from the MongoDB days
+    caused the frontend to read ``user.id`` as ``undefined`` (the JSON
+    came out with ``_id``), which then sent every PATCH/DELETE to
+    ``/api/users/undefined`` and silently 404'd.
     """
 
-    model_config = ConfigDict(populate_by_name=True, str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True)
 
-    id: Optional[str] = Field(default=None, alias="_id")
+    id: Optional[str] = Field(default=None)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
