@@ -61,6 +61,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    allow_origin_regex=settings.BACKEND_CORS_ORIGIN_REGEX or None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -69,11 +70,28 @@ app.add_middleware(
 
 @app.get("/api/health", tags=["meta"])
 async def health() -> dict:
+    """Liveness + readiness in one. Render/Fly will hit this; if the DB
+    is unreachable we still answer 200 (the app degrades gracefully into
+    mock mode) but flag ``db_alive: false`` so monitoring can alert.
+    """
+    db_alive = False
+    db_error = postgres.state.error
+    if postgres.is_connected():
+        try:
+            pool = postgres.get_pool()
+            if pool is not None:
+                async with pool.acquire() as conn:
+                    await conn.fetchval("SELECT 1")
+                db_alive = True
+        except Exception as exc:  # noqa: BLE001
+            db_error = str(exc)
     return {
         "ok": True,
         "mode": "postgres" if postgres.is_connected() else "mock",
-        "db_error": postgres.state.error,
+        "db_alive": db_alive,
+        "db_error": db_error,
         "google_places": settings.has_google_maps,
+        "anthropic": bool(settings.ANTHROPIC_API_KEY.strip()),
     }
 
 

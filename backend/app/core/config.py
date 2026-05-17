@@ -13,7 +13,15 @@ class Settings(BaseSettings):
     # Anthropic API key (optional). When set, icebreakers are generated via
     # Claude Haiku; otherwise the template bank is used.
     ANTHROPIC_API_KEY: str = ""
+    # Set to ``true`` when running behind a reverse proxy (Render, Fly,
+    # nginx, …) so rate-limiting reads the real client IP from
+    # ``X-Forwarded-For`` instead of seeing every request as the LB.
+    TRUST_PROXY: bool = False
     BACKEND_CORS_ORIGINS: str = "http://localhost:8081,http://localhost:8082,http://localhost:19006,http://localhost:19000"
+    # Optional regex that matches additional origins (e.g. Vercel previews
+    # like https://sipsocial-git-feature-niklas.vercel.app). Leave empty to
+    # accept only the explicit BACKEND_CORS_ORIGINS list.
+    BACKEND_CORS_ORIGIN_REGEX: str = ""
 
     # JWT secret for session tokens. Generate with:
     #   python -c 'import secrets; print(secrets.token_urlsafe(48))'

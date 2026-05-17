@@ -555,6 +555,58 @@ poppt am Handy ein Banner auf.
 
 ---
 
+## Deployment (Backend → Render, Web → Vercel)
+
+Beide Configs liegen im Repo:
+- [`render.yaml`](render.yaml) — Blueprint für den Backend-Web-Service
+- [`vercel.json`](vercel.json) — SPA-Routing + Static-Cache-Header für den Web-Build
+
+### Backend → Render (Free-Tier)
+
+1. **<https://dashboard.render.com>** → **New → Blueprint**
+2. GitHub-Repo `Niklasr06/sipsocial` verbinden — Render liest `render.yaml` automatisch
+3. **Secrets eintragen** (das, was als `sync: false` markiert ist):
+   - `DATABASE_URL` — dein Neon-Connection-String
+   - `JWT_SECRET` — `python -c 'import secrets; print(secrets.token_urlsafe(48))'`
+   - `CHAT_ENCRYPTION_KEY` — `python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'`
+   - `GOOGLE_MAPS_API_KEY` — optional
+   - `ANTHROPIC_API_KEY` — optional
+4. **„Apply"** → Build läuft (~3 Min), HTTPS-URL erscheint im Format `https://sipsocial-backend.onrender.com`
+5. **Verifizieren:** `curl https://sipsocial-backend-XXXX.onrender.com/api/health` muss `{"ok": true, "db_alive": true, ...}` zurückgeben
+
+> **Free-Tier-Caveat:** der Dyno schläft nach 15 Min Inaktivität ein. Der erste Request nach dem Schlaf braucht 30–50 s. Für produktive Nutzung auf **Starter ($7/Mo)** upgraden — Sleep raus, ~16 GB RAM-Quota, custom Domain.
+
+### Web-Frontend → Vercel
+
+1. **<https://vercel.com>** → **Add New → Project** → GitHub-Repo importieren
+2. **Framework:** `Other` (Vercel erkennt's per `vercel.json`)
+3. **Environment Variable:** `EXPO_PUBLIC_API_URL` = `https://sipsocial-backend-XXXX.onrender.com` (deine Render-URL aus Schritt 4 oben — **ohne** trailing slash)
+4. **Deploy** → Build läuft (`npm install && npm run build:web`), Ergebnis liegt unter `https://<projektname>.vercel.app`
+5. **Diese URL** in Render unter `BACKEND_CORS_ORIGINS` eintragen, dann Render-Service einmal **Manual Deploy → Clear build cache & deploy** triggern, damit die neue CORS-Origin greift.
+
+Vercel-Preview-Deployments (PR-Branches) sind über das `BACKEND_CORS_ORIGIN_REGEX` in `render.yaml` schon erlaubt — kein Re-Deploy nötig wenn du auf einem Feature-Branch arbeitest.
+
+### Lokaler Build-Test
+
+Falls du den Web-Build vorab lokal sehen willst:
+
+```bash
+npm run build:web              # erzeugt dist/
+cd dist && python3 -m http.server 4321
+# Browser: http://localhost:4321
+```
+
+Das ist genau der Output den Vercel ausliefert.
+
+### Was noch fehlt für „echtes" Production
+
+- **Native Apps** über EAS Build (`eas build --platform ios` / `--platform android`). Kostet $99/Jahr Apple Developer Account + $25 einmalig Play Console.
+- **Custom Domain** (Render und Vercel können beide direkt CNAMEs aufnehmen, je ~2 Min).
+- **Sentry oder ähnlich** für Error-Tracking — bisher nichts angeschlossen.
+- **Email-Provider** (Postmark/SES/Mailgun) für den Passwort-Reset-Token, der derzeit ins Backend-Log statt in eine Mail geht.
+
+---
+
 ## Troubleshooting
 
 | Symptom                                                | Ursache / Fix                                                                 |
@@ -571,6 +623,10 @@ poppt am Handy ein Banner auf.
 | QR-Scan reagiert nicht                                 | Kamera-Permission erteilt? Im Web manchmal blockiert → am Handy via Expo Go testen |
 | Push-Notifications kommen nicht                        | Funktioniert nur auf echten Geräten (kein Simulator, kein Web), Permission „Erlauben" erforderlich |
 | Icebreaker wirken generisch / wie Templates           | `ANTHROPIC_API_KEY` setzen — sonst Fallback auf Template-Bank (per Design)    |
+| Render: erster Request nach Pause dauert 30–50 s      | Free-Tier-Schlaf — auf **Starter ($7/Mo)** upgraden, dann bleibt der Dyno warm |
+| Vercel-App: Web-Login schlägt mit CORS-Fehler         | Vercel-URL exakt (kein trailing slash) in Render's `BACKEND_CORS_ORIGINS` eintragen und Service neu deployen |
+| Vercel-Build crasht mit "Cannot find module 'expo'"   | `installCommand` in `vercel.json` muss `npm install` sein (default), nicht `npm ci` ohne Lockfile |
+| Render-Build schlägt fehl: bcrypt-Compile-Error       | `PYTHON_VERSION` muss in `render.yaml` gesetzt sein (default ist sonst Python 3.10, dort ist bcrypt 4.x wheel buggy) |
 
 ---
 

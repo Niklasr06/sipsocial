@@ -1,0 +1,48 @@
+# Render Blueprint — provisioniert das SipSocial-Backend mit einem Klick.
+#
+# Setup:
+#   1. Repo in Render verbinden (Dashboard → New → Blueprint)
+#   2. Render liest diese Datei und erstellt den Web-Service
+#   3. Die `sync: false`-Vars (Secrets) musst du danach im Dashboard
+#      eintragen — alles andere wird automatisch gesetzt
+#   4. Backend startet auf <name>.onrender.com mit auto-HTTPS
+
+services:
+  - type: web
+    name: sipsocial-backend
+    runtime: python
+    rootDir: backend
+    plan: free                   # 0.5 GB RAM, schläft nach 15 Min — fürs MVP ok
+    region: frankfurt            # nah an Neon-Compute (eu-central-1)
+    branch: main
+    healthCheckPath: /api/health
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --proxy-headers
+    envVars:
+      # ---- Secrets: nach dem ersten Deploy im Render-Dashboard eintragen ----
+      - key: DATABASE_URL
+        sync: false              # Neon-Connection-String
+      - key: JWT_SECRET
+        sync: false              # python -c 'import secrets; print(secrets.token_urlsafe(48))'
+      - key: CHAT_ENCRYPTION_KEY
+        sync: false              # python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false              # optional — leer lassen für Mock-Cafés
+      - key: ANTHROPIC_API_KEY
+        sync: false              # optional — leer lassen für Template-Icebreaker
+
+      # ---- Statische Production-Settings ----
+      - key: JWT_EXPIRES_HOURS
+        value: "1"               # 1h Access-Token, Refresh-Token deckt den Rest
+      - key: REFRESH_TOKEN_DAYS
+        value: "90"
+      - key: TRUST_PROXY
+        value: "true"            # Render terminiert TLS → X-Forwarded-For lesen
+      - key: BACKEND_CORS_ORIGINS
+        # Vercel-Production-URL hier eintragen sobald du sie hast
+        value: "https://sipsocial.vercel.app"
+      - key: BACKEND_CORS_ORIGIN_REGEX
+        # Vercel-Preview-Deployments matchen (PR-Branches etc.)
+        value: "https://sipsocial-.*\\.vercel\\.app"
+      - key: PYTHON_VERSION
+        value: "3.12.6"
