@@ -11,13 +11,14 @@ Neon Postgres** Backend.
 
 ## TL;DR
 
-| Setup                | Befehl                                                  |
-| -------------------- | ------------------------------------------------------- |
-| **Frontend starten** | `npm install && npx expo start`                         |
-| **Backend starten** | siehe „Backend lokal starten" weiter unten              |
-| **Ohne Backend?**    | App läuft mit den eingebauten Mock-Daten weiter         |
-| **Ohne Google Key?** | Café-Vorschläge kommen aus den Mock-Cafés               |
-| **Ohne DB?**         | Backend startet im Mock-Only-Modus, kein Datenverlust   |
+| Setup                 | Befehl                                                  |
+| --------------------- | ------------------------------------------------------- |
+| **Frontend starten**  | `npm install && npx expo start`                         |
+| **Backend starten**   | siehe „Backend lokal starten" weiter unten              |
+| **Ohne Backend?**     | App läuft mit den eingebauten Mock-Daten weiter         |
+| **Ohne Google Key?**  | Café-Vorschläge kommen aus den Mock-Cafés               |
+| **Ohne Anthropic Key?** | Icebreaker kommen aus der Template-Bank statt LLM     |
+| **Ohne DB?**          | Backend startet im Mock-Only-Modus, kein Datenverlust   |
 
 ---
 
@@ -35,10 +36,14 @@ SipSocial/
 │   ├── data/                    # Lokale Mock-Daten (Fallback)
 │   ├── navigation/              # Stacks + Tabs
 │   ├── screens/                 # Alle App-Screens (inkl. Login/Register)
+│   ├── components/CafeMap.web.tsx # Leaflet-basierte OSM-Karte für Web
+│   ├── components/UserActionsSheet.tsx # Block + Report Modal
+│   ├── components/EmptyState.tsx  # Wiederverwendbarer Empty-State
 │   ├── services/                # *Api.ts (Backend) + lokale Services
-│   │   ├── apiClient.ts         # Zentraler fetch-Wrapper + Bearer-Header
-│   │   ├── authApi.ts           # /register, /login, /me
-│   │   ├── tokenStore.ts        # AsyncStorage-basiertes Token-Caching
+│   │   ├── apiClient.ts         # Zentraler fetch-Wrapper + Bearer + 401-Retry
+│   │   ├── authApi.ts           # /register, /login, /refresh, /me, /password-reset/*
+│   │   ├── blockApi.ts          # /blocks, /reports
+│   │   ├── tokenStore.ts        # Access + Refresh in AsyncStorage
 │   │   ├── pushService.ts       # Expo-Notifications: Permission + Token-Reg.
 │   │   └── ...
 │   ├── store/AppContext.tsx     # zentraler App-State + Auth-Bootstrap
@@ -55,21 +60,25 @@ SipSocial/
         │   └── ...
         ├── core/
         │   ├── config.py        # Pydantic-Settings (liest .env)
-        │   └── security.py      # Bearer-Auth-Dependency (JWT)
+        │   ├── security.py      # Bearer-Auth-Dependency (JWT)
+        │   └── rate_limit.py    # slowapi Limiter (für auth.py geteilt)
         ├── db/
         │   ├── postgres.py      # asyncpg-Pool + Schema/Seed-Bootstrap
         │   └── schema.sql       # alle Tabellen, idempotent
         ├── models/              # Re-Exports der Pydantic-Modelle
         ├── schemas/             # Pydantic-Schemas (API + DB)
         ├── services/            # Domain-Logik
-        │   ├── auth_service.py        # bcrypt + Session-JWT + QR-Token-JWT
-        │   ├── cafe_service.py        # Google Places (v1) + Cache
+        │   ├── auth_service.py        # bcrypt + Access-JWT + Refresh-Token + QR-JWT + Reset-Token
+        │   ├── block_service.py       # Blocks + Reports + Matching-Filter
+        │   ├── cafe_service.py        # Google Places (v1) + primaryType-Filter + Cache
         │   ├── chat_service.py        # Fernet-verschlüsselter Chat
-        │   ├── icebreaker_service.py  # Fragen nach Interessen
-        │   ├── matching_service.py    # Score-Berechnung
+        │   ├── icebreaker_service.py  # LLM-first, Template-Bank-Fallback
+        │   ├── llm_icebreaker.py      # Claude Haiku 4.5 + Prompt-Caching
+        │   ├── matching_service.py    # Score-Berechnung + Block-Filter
         │   ├── meeting_service.py
         │   ├── notification_service.py # Expo Push Gateway
         │   ├── privacy_filter.py      # Regex-Schutz
+        │   ├── reminder_service.py    # asyncio-Loop: 1h-Check-In-Reminder
         │   ├── repo.py                # date/time-Helper für asyncpg
         │   └── ...
         └── utils/crypto.py      # Fernet-Wrapper
@@ -235,29 +244,92 @@ also wird derselbe Bereich nicht zweimal abgefragt.
 
 ---
 
-## Authentifizierung (Email + Passwort + JWT)
+## Anthropic API einrichten (optional)
+
+Ohne Key fallen Icebreaker auf die Template-Bank zurück. Mit Key
+generiert das Backend frische, kontextspezifische deutsche Fragen via
+Claude Haiku 4.5.
+
+1. Account auf <https://console.anthropic.com>, **API Keys → Create Key**.
+2. Key in `backend/.env`:
+   ```env
+   ANTHROPIC_API_KEY=sk-ant-…
+   ```
+3. Backend neu starten. Sobald ein Match Icebreaker anfragt, siehst du
+   im Log eine Zeile wie:
+   ```
+   Icebreaker LLM ok · cache_read=512 cache_write=0 input=12 output=178
+   ```
+   Beim ersten Call ist `cache_write` > 0, danach `cache_read` > 0 — der
+   System-Prompt landet im Anthropic-Prompt-Cache.
+
+Kosten: Haiku 4.5 ist günstig ($1 / 1M Input, $5 / 1M Output) und der
+Cache-Read kostet nur ~10 % davon. Bei ein paar hundert Matches pro Tag
+liegst du deutlich unter $1/Monat.
+
+---
+
+## Authentifizierung (Access + Refresh + Reset, Rate-Limited)
 
 Echte Auth ist live — keine Mock-Logins mehr.
 
-| Endpunkt                | Body                                | Antwort                                  |
-| ----------------------- | ----------------------------------- | ---------------------------------------- |
-| `POST /api/auth/register` | `{pseudonym, email, password}`    | `{user, token}` — 201, oder 409 wenn Email bereits existiert |
-| `POST /api/auth/login`    | `{email, password}`               | `{user, token}` — 200, oder 401 (generisch, um Email-Enumeration zu vermeiden) |
-| `GET  /api/auth/me`       | Header `Authorization: Bearer …` | `{user}` — 200                            |
+| Endpunkt                              | Body                                  | Antwort                                                                |
+| ------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------- |
+| `POST /api/auth/register`             | `{pseudonym, email, password}`        | `{user, token, refresh_token}` — 201, oder 409 bei Email-Konflikt      |
+| `POST /api/auth/login`                | `{email, password}`                   | `{user, token, refresh_token}` — 200, oder 401 (generisch)             |
+| `POST /api/auth/refresh`              | `{refresh_token}`                     | `{token, refresh_token}` — 200, Token-Rotation                          |
+| `POST /api/auth/logout`               | `{refresh_token}`                     | 204 No Content (revokt den Refresh-Token)                              |
+| `POST /api/auth/password-reset/request` | `{email}`                           | 202 (immer — kein Email-Enumeration-Leak)                              |
+| `POST /api/auth/password-reset/confirm` | `{token, new_password}`             | `{user, token, refresh_token}` — 200                                   |
+| `GET  /api/auth/me`                   | Header `Authorization: Bearer …`     | `{user}` — 200                                                          |
 
-- Passwörter werden mit **bcrypt** (Cost 12) gehasht.
-- Tokens sind **JWT HS256**, Default-Lebensdauer **7 Tage** (`JWT_EXPIRES_HOURS`).
-- Frontend speichert das Token via `AsyncStorage` (`src/services/tokenStore.ts`)
-  und sendet es automatisch im `Authorization`-Header.
-- Beim App-Start versucht `AppContext` `/me` → bei Erfolg ist der User
-  eingeloggt und die Verfügbarkeit wird aus der DB nachgeladen.
+### Architektur
+
+- **Access-Token**: kurzlebige JWT (HS256, Default **1 h**, `JWT_EXPIRES_HOURS`).
+- **Refresh-Token**: opaque, server-rotated, 90 Tage Default
+  (`REFRESH_TOKEN_DAYS`). Nur als SHA-256-Hash in der
+  `refresh_tokens`-Tabelle gespeichert — ein DB-Leak gibt dem Angreifer
+  nichts zum Replayen.
+- **Token-Rotation**: jeder `/auth/refresh`-Call revokt den verbrauchten
+  Refresh-Token und gibt einen frischen aus. Ein Replay des alten Tokens
+  liefert 401.
+- **Passwörter**: bcrypt Cost 12.
+- **Frontend**: speichert beide Tokens via `AsyncStorage`
+  (`src/services/tokenStore.ts`). Der `apiClient` hat einen
+  401-Retry-Loop, der einmal `/auth/refresh` aufruft und die Original-
+  Anfrage wiederholt. Parallel-Requests teilen sich denselben
+  Refresh-Call (Coalescing).
+
+### Passwort-Reset
+
+`POST /auth/password-reset/request` antwortet immer 202 — wir verraten
+nicht, ob die Email existiert. Token gültig 15 Minuten, single-use.
+**Email-Versand ist noch nicht angeschlossen**; der Reset-Token wird ins
+Backend-Log geschrieben (`logger.warning("[password-reset] token issued …")`).
+Bei `confirm` wird das neue Passwort gesetzt, **alle aktiven
+Refresh-Tokens des Users werden revoked**, und der User bekommt direkt
+ein frisches Auth-Paar.
+
+### Rate Limiting
+
+IP-basiert via `slowapi` auf den kritischen Auth-Routen:
+
+| Route                                | Limit       |
+| ------------------------------------ | ----------- |
+| `POST /api/auth/register`            | 5 / Minute  |
+| `POST /api/auth/login`               | 10 / Minute |
+| `POST /api/auth/refresh`             | 30 / Minute |
+| `POST /api/auth/password-reset/request` | 3 / Minute  |
+| `POST /api/auth/password-reset/confirm` | 5 / Minute  |
+
+Überschritten → 429 mit `Retry-After`.
 
 ### Geschützte Endpunkte
 
 Die meisten Domain-Endpunkte (User-Profil, Availability, Matches, Chat,
-Meetings) erfordern einen gültigen Bearer-Token. Im Mock-Only-Modus
-(Backend ohne DB) wird die Auth-Schicht abgeschaltet, damit die App
-auch dann läuft.
+Meetings, Blocks, Reports) erfordern einen gültigen Bearer-Token. Im
+Mock-Only-Modus (Backend ohne DB) wird die Auth-Schicht abgeschaltet,
+damit die App auch dann läuft.
 
 ---
 
@@ -279,15 +351,17 @@ Alle Endpunkte unter `/api/...`:
 
 | Bereich       | Endpunkte                                                                 |
 | ------------- | ------------------------------------------------------------------------- |
-| **Auth**      | `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`     |
+| **Auth**      | `POST /api/auth/{register,login,refresh,logout}`, `POST /api/auth/password-reset/{request,confirm}`, `GET /api/auth/me` |
 | User          | `POST/GET/PATCH /api/users[/{id}]`, `PUT /api/users/me/push-token`        |
 | Profile       | `POST/GET/PATCH /api/profiles[/{user_id}]`                                |
-| Availability  | `POST /api/availability`, `GET /api/availability/{user_id}`               |
+| Availability  | `POST /api/availability`, `GET /api/availability/{user_id}`, `DELETE /api/availability/{id}` |
 | Matching      | `POST /api/matches/find`, `GET /api/matches/{user_id}`, `PATCH /api/matches/{id}/status` |
 | Cafés         | `GET /api/cafes/search`, `/api/cafes/nearby`, `/api/cafes/{id}`           |
 | Meetings      | `POST/GET/PATCH /api/meetings[/{id}]`, `POST /api/meetings/{id}/check-in` |
 | Chat          | `GET /api/chat/{match_id}`, `POST /api/chat/{match_id}/message`           |
 | Icebreaker    | `GET /api/chat/{match_id}/icebreakers`                                    |
+| Blocks        | `POST/DELETE /api/blocks/{user_id}`, `GET /api/blocks`                    |
+| Reports       | `POST /api/reports`                                                       |
 | Health        | `GET /api/health`                                                         |
 
 OpenAPI-Doku läuft automatisch auf `http://localhost:8000/docs`.
@@ -302,21 +376,26 @@ OpenAPI-Doku läuft automatisch auf `http://localhost:8000/docs`.
 - Ohne Key oder bei API-Fehler greift die App auf die mitgelieferten
   Mock-Cafés zurück.
 
-### 4. Karten-Ansicht
-- Auf iOS/Android wird `react-native-maps` dynamisch geladen, falls
-  installiert.
-- Im Web (und falls die Native-Map nicht verfügbar ist) zeigt SipSocial ein
-  designtes Fallback: Café-Marker auf einem relativen Koordinatensystem mit
-  Auswahl-Callout, im SipSocial-Farbschema.
-- Marker sind anklickbar, das gewählte Café erscheint als Card unter der
-  Karte mit „Dieses Café vorschlagen" / „Anderes Café suchen".
+### 4. Karten-Ansicht (echt — auf jedem Target)
+- **iOS / Android:** `react-native-maps` mit Apple Maps (iOS) bzw. Google
+  Maps (Android). Wird dynamisch geladen, falls installiert.
+- **Web:** echte **OpenStreetMap-Tiles** via Leaflet + react-leaflet
+  (`src/components/CafeMap.web.tsx`). Kein API-Key nötig; CSS wird per
+  `<link>` lazily injiziert. Metro picks die `.web.tsx`-Datei
+  automatisch, Leaflet erreicht den Native-Bundle nicht.
+- Marker im SipSocial-Style (cream/coffee, ausgewähltes Café primary).
+  FitBounds zentriert automatisch.
+- **Café-Filter** auf dem Vorschlags-Screen: häufigste Atmosphäre-Tags
+  als Chips + Rating-Filter (4.0+, 4.5+). Karte und Liste folgen dem
+  Filter; bei leerem Treffer kommt ein „Filter zurücksetzen"-Link.
 
 ### 5. Frontend API-Schicht
-- `src/services/apiClient.ts` ist der einzige Ort mit `fetch` und hängt
-  automatisch den Bearer-Token an.
+- `src/services/apiClient.ts` ist der einzige Ort mit `fetch`, hängt
+  automatisch den Bearer-Token an und hat einen **401-Retry-Loop**, der
+  einmal `/auth/refresh` ruft und die Original-Anfrage wiederholt.
 - Pro Domäne ein typisierter Service: `authApi`, `userApi`, `profileApi`,
   `availabilityApi`, `matchingApi`, `cafeApi`, `meetingApi`, `chatApi`,
-  `icebreakerApi`.
+  `icebreakerApi`, `blockApi`, plus `pushService` und `tokenStore`.
 - Bei offline-Backend wirft der Client `ApiUnavailableError`. Die Screens
   fangen das ab und zeigen die lokale Variante mit Hinweis-Text.
 
@@ -337,13 +416,18 @@ OpenAPI-Doku läuft automatisch auf `http://localhost:8000/docs`.
 - **Soft-Warnung** → Nachricht geht durch, der Nutzer sieht die Hinweise inline.
 - Gespeicherte Nachrichten tragen `blocked` und `privacy_warnings`.
 
-### 8. Icebreaker
+### 8. Icebreaker (LLM-generiert via Claude Haiku 4.5)
+- Wenn `ANTHROPIC_API_KEY` gesetzt ist, ruft das Backend **Claude Haiku 4.5**
+  via Anthropic Python SDK auf und lässt frische, deutschsprachige
+  Eisbrecher-Fragen generieren, die zu den gemeinsamen Interessen passen.
+- Prompt-Caching auf dem stabilen System-Prompt — ab dem 2. Call ist der
+  Prefix ein günstiger Cache-Read (~ 90 % billiger). cache_read /
+  cache_write / input / output werden geloggt.
+- **Graceful Fallback** auf die Template-Bank im selben Service, wenn
+  kein API-Key da ist, die Anfrage scheitert oder die LLM-Antwort sich
+  nicht parsen lässt — kein Crash, gleicher UI-Flow.
 - Eigener Screen `IcebreakerScreen.tsx`, erreichbar aus dem Chat über den
-  „Icebreaker"-Button im Header.
-- Backend erzeugt Fragen passend zu den `shared_interests` und cached sie in
-  `icebreakers`. Ohne Backend nutzt das Frontend die identische Fragen-Bank
-  lokal.
-- Karten zeigen *„Passend zu euren gemeinsamen Interessen"* mit Buttons
+  „Icebreaker"-Button im Header. Karten zeigen die Fragen mit Buttons
   „Nächste Frage", „Zum Chat", „Zum Treffen".
 
 ### 9. Matching mit Café-Integration
@@ -367,14 +451,67 @@ OpenAPI-Doku läuft automatisch auf `http://localhost:8000/docs`.
 - Bei offline-Backend: lokaler Fallback, der zumindest prüft, ob der
   gescannte Token dem Meeting-QR entspricht.
 
-### 11. Push-Notifications (nativ)
+### 11. Block & Report (Safety)
+- Neue Tabellen `blocks` (`blocker_id`, `blocked_id`, `reason`) und
+  `reports` (`reporter_id`, `reported_id`, `match_id`, `reason`, `details`,
+  `status`).
+- **Block ist symmetrisch im Matching**: ein Block in eine Richtung
+  versteckt das Paar in beide Richtungen
+  (`block_service.blocked_pair_ids` plug-in im Matching-Loop).
+- **Report blockiert automatisch mit** — Reports bedeuten in der Praxis
+  „ich will diese Person nicht mehr sehen", und nicht zu blockieren
+  wäre eine Überraschung.
+- Frontend: `UserActionsSheet`-Komponente (Modal mit Block + Report-
+  Optionen) im Header von `LimitedChatScreen`. Confirm-Dialog vorm
+  Block (Web: `window.confirm`; Native: `Alert.alert`). Report-Modal
+  mit Grund-Picker (6 Gründe inkl. „Etwas anderes") + Details-Textarea
+  + Safety-Card mit Hinweis auf die Polizei für akute Fälle.
+- API: `POST/DELETE /api/blocks/{user_id}`, `GET /api/blocks`,
+  `POST /api/reports`. Self-Block/Self-Report → 400. Unbekannte
+  Report-Reasons → 400.
+
+### 12. Mehrere Verfügbarkeiten + Treffen-Management
+- `add_availability` ist append-only — User können mehrere Zeitfenster
+  parallel hinterlegen (z. B. „Mi 18-20 in Mitte" + „Sa 14-16 in
+  Reutlingen"). Neuer `DELETE /api/availability/{id}` mit User-Guard.
+- `AvailabilityEditScreen` zeigt die eigenen Slots oben mit Trash-Icon,
+  drunter ein Add-Form. Duplikat-Erkennung verhindert die gleiche
+  Kombination zweimal.
+- **Treffen absagen** und **verschieben** sind echte Aktionen:
+  `PATCH /api/meetings/{id}` ist auth-pflichtig, prüft Teilnehmerschaft,
+  triggert eine Push an die andere Seite mit Café-Name bzw. neuem
+  Termin. Eigener `MeetingRescheduleScreen` mit 14-Tage-Picker und
+  Uhrzeit-Chips.
+- **Profil im Nachhinein editieren**: neuer `ProfileEditScreen` deckt
+  alle Felder aus dem Onboarding ab (Pseudonym, Bio, Alter, Treffenstyp,
+  Interessen, Privacy-Toggles). Save-Button ist disabled wenn nichts
+  geändert wurde.
+
+### 13. UX-Polish: Pull-to-Refresh + Empty States
+- `Screen`-Komponente nimmt optional `onRefresh` → `RefreshControl`
+  baked-in für Home, Matches, Treffen.
+- Neue `EmptyState`-Komponente (Icon + Headline + Description + bis zu
+  2 CTAs) ersetzt die generischen „Hier ist noch nichts"-Karten. Der
+  Matches-Screen unterscheidet zwischen „Du hast noch keine
+  Verfügbarkeit" (CTA: Slot anlegen) und „aktuell keine offenen
+  Vorschläge" (CTA: Verfügbarkeit erweitern + Erneut suchen).
+
+### 14. Push-Notifications (nativ)
 - Backend speichert pro User einen `expo_push_token` und schickt Pushes
   via Expo's Public Push Gateway (`exp.host/--/api/v2/push/send`).
 - Trigger:
   - **Match angenommen** (`PATCH /matches/{id}/status` → `accepted`) → die
     andere Seite bekommt „X möchte mit dir auf einen Kaffee."
   - **Treffen bestätigt** (`POST /meetings`) → Push mit Café-Name.
+  - **Treffen abgesagt** (`PATCH /meetings/{id}` → `cancelled`) →
+    „X hat das Treffen abgesagt."
+  - **Treffen verschoben** (`PATCH /meetings/{id}` mit neuem
+    Datum/Café) → Push mit neuem Termin.
   - **Chat-Nachricht** (nicht blockiert) → Push mit Pseudonym + Vorschau.
+  - **Check-In-Erinnerung 1 h vorher**: ein asyncio-Reminder-Loop
+    (`reminder_service`) im FastAPI-Lifespan tickt alle 5 Min, sucht
+    Meetings im 55–75-Min-Fenster ohne `reminder_sent_at`, pusht beide
+    Teilnehmer und stempelt den Sent-Timestamp.
 - Frontend (`src/services/pushService.ts`):
   - holt sich die Permission, ruft `getExpoPushTokenAsync` und meldet
     den Token via `PUT /api/users/me/push-token` an.
@@ -389,19 +526,28 @@ OpenAPI-Doku läuft automatisch auf `http://localhost:8000/docs`.
 ## Demo-Flow
 
 1. Onboarding → **Registrieren** (Pseudonym + Email + Passwort)
-2. Profil einrichten → Interessen → Verfügbarkeit speichern
-3. Auf Home erscheinen Matches — auf einen tippen → Café-Vorschlag → Karte
-   mit echten Google-Cafés → Café wählen → Treffen bestätigen
-4. QR-Check-in: **„QR-Code scannen"** öffnet die Kamera → richte sie auf
+2. Profil einrichten → Interessen → Verfügbarkeit speichern (gerne
+   mehrere Slots in mehreren Bereichen — z. B. Mitte und Reutlingen)
+3. Auf Home erscheinen Matches — auf einen tippen → Café-Vorschlag →
+   echte OSM-/Google-Maps-Karte mit Google-Places-Cafés → optional
+   Atmosphäre/Rating-Filter setzen → Café wählen → Treffen bestätigen
+4. **Pull-to-Refresh** auf Home/Matches/Treffen lädt frische Vorschläge
+5. QR-Check-in: **„QR-Code scannen"** öffnet die Kamera → richte sie auf
    den QR-Code → eingecheckt. (Nativ am Handy am komfortabelsten.)
-5. Chat öffnen → 3 Nachrichten schreiben → Filter testet z. B. mit:
-   *„Schreib mir auf Instagram @niki"* (wird geblockt)
-6. Icebreaker-Button oben rechts → Fragen passend zu Interessen, „Nächste
-   Frage" wechselt durch
-7. Profil → **Abmelden** → erneut **Anmelden** → User + Verfügbarkeit
-   bleiben dank Neon erhalten
-8. Im Profil-Tab → „Sicherheit & Datenschutz" + „Vertrauensstatus" zeigen
-   das No-Show-System
+6. Chat öffnen → Icebreaker oben rechts (Claude-Haiku-generiert wenn
+   `ANTHROPIC_API_KEY` gesetzt) → 3 Nachrichten schreiben → Filter
+   testet z. B. mit *„Schreib mir auf Instagram @niki"* (wird geblockt)
+7. „⋯"-Menü im Chat-Header → **Block** oder **Melden** → User
+   verschwindet aus Match-Vorschlägen
+8. Treffen-Tab → **Verschieben** (14-Tage-Picker) oder **Absagen**
+   (Confirm-Dialog) → die andere Seite kriegt eine Push
+9. Profil → **Profil bearbeiten** ändert Pseudonym/Bio/Interessen ohne
+   Re-Registrieren
+10. Profil → **Abmelden** → **Passwort vergessen?** → Reset-Code aus dem
+    Backend-Log eingeben → mit neuem Passwort anmelden — alle alten
+    Refresh-Tokens des Users sind revoked
+11. Nach 1 Stunde Wartezeit auf einem geplanten Treffen → automatische
+    Check-In-Erinnerung als Push an beide
 
 Für Push-Notifications-Demo: zweites Gerät (oder Browser-Tab) als Match
 nutzen — sobald die andere Seite Chat schickt oder das Treffen bestätigt,
@@ -417,11 +563,14 @@ poppt am Handy ein Banner auf.
 | Google Places liefert nur Mock-Cafés                   | Backend-Log prüfen — meistens `403 blocked` (siehe Key-Restriktionen oben)    |
 | Backend startet, `health` ok, aber CORS-Fehler im Web  | Frontend-Origin in `BACKEND_CORS_ORIGINS` ergänzen                            |
 | App am Handy: „Backend nicht erreichbar"               | Siehe „Auf dem Handy testen" — LAN-IP in `.env`, Backend an `0.0.0.0`, macOS-Firewall erlauben |
-| `401` auf geschütztem Endpunkt                         | Token abgelaufen → ausloggen + neu anmelden, oder `JWT_EXPIRES_HOURS` höher   |
+| `401` auf geschütztem Endpunkt                         | Access-Token abgelaufen → apiClient sollte automatisch via `/auth/refresh` retryen; wenn das auch 401 gibt, ist der Refresh-Token revoked → erneut anmelden |
+| `429` auf Login/Register                               | Rate-Limit ausgelöst → IP wartet 1 Min. Im Dev: warten oder Backend neu starten löscht den slowapi-Bucket |
+| Passwort-Reset-Email kommt nicht an                    | E-Mail-Versand ist noch nicht angeschlossen — der Token steht im Backend-Log unter `[password-reset] token issued` |
 | Expo zeigt weißen Screen                               | Browser-Console öffnen — typisch ist ein fehlendes `npm install`              |
 | `bcrypt`-Fehler beim Login                             | bcrypt ≥ 4.3 nutzen (`pip install -U bcrypt`)                                 |
 | QR-Scan reagiert nicht                                 | Kamera-Permission erteilt? Im Web manchmal blockiert → am Handy via Expo Go testen |
 | Push-Notifications kommen nicht                        | Funktioniert nur auf echten Geräten (kein Simulator, kein Web), Permission „Erlauben" erforderlich |
+| Icebreaker wirken generisch / wie Templates           | `ANTHROPIC_API_KEY` setzen — sonst Fallback auf Template-Bank (per Design)    |
 
 ---
 
@@ -430,10 +579,21 @@ poppt am Handy ein Banner auf.
 - Im Mock-Only-Modus persistiert das Backend keine Schreibvorgänge.
 - Der Google-Places-Cache läuft nie ab; in Produktion sollte ein TTL ergänzt
   werden.
+- **Passwort-Reset ohne Email-Versand.** Der Token landet im
+  Backend-Log statt in einer echten Mail. SES/Postmark/Mailgun-Hook ist
+  trivial nachzurüsten (`logger.warning(...)` in
+  `app/api/auth.py:password_reset_request` ist der einzige Punkt).
 - **Push-Notifications nur nativ.** Web-Push würde Service-Worker + VAPID
   brauchen — bewusst weggelassen für den MVP.
 - Pro User nur **ein** Expo-Push-Token (eine Geräteinstallation). Mehrere
   Devices pro User würden eine eigene Tabelle brauchen.
-- Kein Refresh-Token-Flow; abgelaufene JWTs erfordern Re-Login.
 - QR-Tokens werden auch nach erfolgreichem Check-In nicht invalidiert —
   Re-Scans während des 24-h-Fensters wären weiter möglich.
+- Rate-Limit ist **IP-basiert** (slowapi) und in-process — taugt für
+  einen einzelnen uvicorn-Worker, hinter Load-Balancern braucht es eine
+  geteilte Backing-Store (Redis) und einen Header-basierten Key-Func.
+- **Block/Report ohne Moderations-Dashboard.** Reports landen in der DB,
+  werden aber nicht aktiv geprüft — der nächste Schritt wäre ein
+  internes Admin-UI.
+- **Kein Email-Versand** für Auth-Flows insgesamt (Verification,
+  Welcome-Mail) — alles passiert direkt nach Register/Reset.
