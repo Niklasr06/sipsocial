@@ -129,8 +129,13 @@ export interface AppContextValue extends AppState {
   authBootstrapping: boolean;
   /** Real backend register. Throws ``AuthError`` for the UI to render. */
   signUp: (payload: { pseudonym: string; email: string; password: string }) => Promise<User>;
-  /** Real backend login. Throws ``AuthError`` for the UI to render. */
-  signIn: (payload: { email: string; password: string }) => Promise<User>;
+  /**
+   * Real backend login. Throws ``AuthError`` for the UI to render. The
+   * returned object includes ``hasAvailability`` so the login screen can
+   * deep-link partially onboarded users to the right step without waiting
+   * on a re-render of the AppContext state.
+   */
+  signIn: (payload: { email: string; password: string }) => Promise<{ user: User; hasAvailability: boolean }>;
   /** Clears the session and returns the navigator to the onboarding stack. */
   signOut: () => Promise<void>;
   setCurrentUser: (user: User | null) => void;
@@ -277,7 +282,9 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   );
 
   const signIn = useCallback(
-    async (payload: { email: string; password: string }): Promise<User> => {
+    async (
+      payload: { email: string; password: string },
+    ): Promise<{ user: User; hasAvailability: boolean }> => {
       try {
         const res = await authApi.login(payload);
         await setTokens(res.token, res.refresh_token);
@@ -285,11 +292,12 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         dispatch({ type: 'SET_USER', user });
         // Hydrate availability so the user lands on Home, not Onboarding.
         const list = await backendLoadAvailabilities(user.id).catch(() => null);
-        if (list && list.length > 0) {
+        const hasAvailability = !!list && list.length > 0;
+        if (hasAvailability) {
           dispatch({ type: 'REPLACE_AVAILABILITIES', userId: user.id, list });
         }
         registerPushTokenForCurrentUser().catch(() => null);
-        return user;
+        return { user, hasAvailability };
       } catch (err) {
         if (isApiUnavailable(err)) {
           throw { code: 'network', message: 'Backend nicht erreichbar.' } as AuthError;

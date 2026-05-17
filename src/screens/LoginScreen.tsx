@@ -30,8 +30,17 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     setSubmitting(true);
     setServerError(null);
     try {
-      await signIn({ email, password });
-      // RootNavigator switches to the main stack as soon as the user is set.
+      const { user, hasAvailability } = await signIn({ email, password });
+      // RootNavigator auto-switches to Main as soon as onboarding is complete
+      // (interests >= 3 + at least one availability). If the user registered
+      // but never finished the setup flow, they'd otherwise be stuck staring
+      // at the now-pointless Login screen — jump them to the right next step.
+      if (user.interests.length < 3) {
+        navigation.navigate('ProfileSetup');
+      } else if (!hasAvailability) {
+        navigation.navigate('Availability', { fromOnboarding: true });
+      }
+      // else: onboarding is complete — RootNavigator unmounts this stack.
     } catch (e) {
       const err = e as AuthError;
       setServerError(err?.message ?? 'Login fehlgeschlagen.');
