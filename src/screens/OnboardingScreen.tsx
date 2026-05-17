@@ -33,25 +33,19 @@ const FEATURES: { icon: keyof typeof Ionicons.glyphMap; title: string; descripti
 ];
 
 const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
-  const { currentUser, availabilities, authBootstrapping } = useApp();
+  const { currentUser, authBootstrapping } = useApp();
 
-  // If a returning user lands here with a stored token, they're already
-  // logged in — show them the next onboarding step they actually need
-  // instead of asking them to "Loslegen" (which leads to Register and
-  // a 409). Wait for the /me bootstrap to finish before deciding.
+  // Returning user with stored token + unvollständigem Profil landet sonst
+  // hier auf dem Intro statt im ProfileSetup. Sobald /me durch ist, leiten
+  // wir um. (Wer fertig ist, sieht den Screen eh nicht — RootNavigator
+  // hat dann schon zum Main-Stack umgeschaltet.)
   useEffect(() => {
     if (authBootstrapping) return;
     if (!currentUser) return;
     if (currentUser.interests.length < 3) {
       navigation.replace('ProfileSetup');
-      return;
     }
-    const hasAvailability = availabilities.some((a) => a.userId === currentUser.id);
-    if (!hasAvailability) {
-      navigation.replace('Availability', { fromOnboarding: true });
-    }
-    // else: fully onboarded — RootNavigator swaps stacks; nothing to do here.
-  }, [authBootstrapping, currentUser, availabilities, navigation]);
+  }, [authBootstrapping, currentUser, navigation]);
 
   return (
     <Screen padded={false}>

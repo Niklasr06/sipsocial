@@ -8,12 +8,11 @@ export type OnboardingStackParamList = {
   PasswordResetConfirm: { email?: string } | undefined;
   ProfileSetup: undefined;
   Interests: undefined;
-  Availability: { fromOnboarding?: boolean } | undefined;
 };
 
 export type MainTabParamList = {
   Home: undefined;
-  Matches: undefined;
+  Chat: undefined;
   Meetings: undefined;
   Profile: undefined;
 };
@@ -31,4 +30,5 @@ export type RootStackParamList = {
   Safety: undefined;
   MeetingReschedule: { meetingId: string };
   ProfileEdit: undefined;
+  Matches: undefined;
 };

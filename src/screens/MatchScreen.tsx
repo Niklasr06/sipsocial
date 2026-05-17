@@ -1,21 +1,16 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { CompositeScreenProps } from '@react-navigation/native';
-import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { MainTabParamList, RootStackParamList } from '../navigation/types';
-import { Avatar, Button, Card, EmptyState, ScoreBadge, Screen, StatusPill } from '../components';
+import { RootStackParamList } from '../navigation/types';
+import { Avatar, Button, Card, EmptyState, Header, ScoreBadge, Screen, StatusPill } from '../components';
 import { colors, fonts, radius, spacing, typography } from '../theme';
 import { useApp } from '../store/AppContext';
 import { formatDateLong, formatTimeRange } from '../utils/date';
 import { INTEREST_EMOJI } from '../data/interests';
 import { Match } from '../types';
 
-type Props = CompositeScreenProps<
-  BottomTabScreenProps<MainTabParamList, 'Matches'>,
-  NativeStackScreenProps<RootStackParamList>
->;
+type Props = NativeStackScreenProps<RootStackParamList, 'Matches'>;
 
 const MatchScreen: React.FC<Props> = ({ navigation }) => {
   const { matches, fetchMatches, getUser, getCafe, cancelMatch, currentUser, availabilities } = useApp();
@@ -34,16 +29,19 @@ const MatchScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <Screen onRefresh={() => fetchMatches().catch(() => null)}>
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>Matches</Text>
-        <Button
-          label="Aktualisieren"
-          variant="ghost"
-          size="md"
-          onPress={() => fetchMatches()}
-          iconLeft={<Ionicons name="refresh" size={16} color={colors.primary} />}
-        />
-      </View>
+      <Header
+        onBack={() => navigation.goBack()}
+        title="Matches"
+        rightSlot={
+          <Button
+            label="Aktualisieren"
+            variant="ghost"
+            size="md"
+            onPress={() => fetchMatches()}
+            iconLeft={<Ionicons name="refresh" size={16} color={colors.primary} />}
+          />
+        }
+      />
       <Text style={[typography.body, styles.subline]}>
         Vorschläge basieren auf Zeit, Bereich, Interessen und Treffenstyp.
       </Text>

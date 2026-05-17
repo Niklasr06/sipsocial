@@ -26,7 +26,9 @@ const InterestsScreen: React.FC<Props> = ({ navigation }) => {
   const onContinue = async () => {
     if (!enough) return;
     await saveUserToBackend({ interests: selected });
-    navigation.navigate('Availability', { fromOnboarding: true });
+    // Onboarding ist fertig: RootNavigator switcht automatisch zum Main-Stack
+    // sobald interests >= 3 dispatched ist und der currentUser-State sich
+    // aktualisiert hat. Kein explizites navigation.navigate nötig.
   };
 
   return (
@@ -34,16 +36,16 @@ const InterestsScreen: React.FC<Props> = ({ navigation }) => {
       <Header
         onBack={() => navigation.goBack()}
         title="Interessen"
-        subtitle="Schritt 2 von 3"
+        subtitle="Schritt 2 von 2"
       />
       <Text style={styles.headline}>Was bewegt dich?</Text>
       <Text style={styles.subline}>
-        Wähle mindestens {MIN_INTERESTS} Interessen aus. Sie helfen, passende Treffen vorzuschlagen.
+        Wähle mindestens {MIN_INTERESTS} Interessen aus — nach oben offen. Je mehr du angibst, desto besser passen die Vorschläge.
       </Text>
 
       <View style={styles.counter}>
         <Text style={[typography.caption, { color: enough ? colors.success : colors.textSecondary }]}>
-          {selected.length} / {MIN_INTERESTS} ausgewählt
+          {selected.length} ausgewählt {enough ? '' : `· noch ${MIN_INTERESTS - selected.length}`}
         </Text>
       </View>
 
@@ -60,7 +62,7 @@ const InterestsScreen: React.FC<Props> = ({ navigation }) => {
       </View>
 
       <Button
-        label={enough ? 'Weiter zur Verfügbarkeit' : `Noch ${MIN_INTERESTS - selected.length} auswählen`}
+        label={enough ? 'Fertig' : `Noch ${MIN_INTERESTS - selected.length} auswählen`}
         onPress={onContinue}
         disabled={!enough}
         fullWidth

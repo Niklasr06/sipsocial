@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { OnboardingStackParamList } from '../navigation/types';
-import { Button, Header, Input, Screen, SafetyCard } from '../components';
+import { Button, Header, Input, Screen } from '../components';
 import { colors, fonts, spacing, typography } from '../theme';
 import { useApp } from '../store/AppContext';
 import type { AuthError } from '../store/AppContext';
@@ -30,17 +30,13 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     setSubmitting(true);
     setServerError(null);
     try {
-      const { user, hasAvailability } = await signIn({ email, password });
-      // RootNavigator auto-switches to Main as soon as onboarding is complete
-      // (interests >= 3 + at least one availability). If the user registered
-      // but never finished the setup flow, they'd otherwise be stuck staring
-      // at the now-pointless Login screen — jump them to the right next step.
+      const { user } = await signIn({ email, password });
+      // RootNavigator auto-switches to Main as soon as interests >= 3.
+      // Wer das Profil noch nicht durch hat, kommt direkt nach
+      // ProfileSetup; sonst nichts zu tun.
       if (user.interests.length < 3) {
         navigation.navigate('ProfileSetup');
-      } else if (!hasAvailability) {
-        navigation.navigate('Availability', { fromOnboarding: true });
       }
-      // else: onboarding is complete — RootNavigator unmounts this stack.
     } catch (e) {
       const err = e as AuthError;
       setServerError(err?.message ?? 'Login fehlgeschlagen.');
@@ -81,12 +77,6 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={[typography.small, { color: colors.error }]}>{serverError}</Text>
           </View>
         ) : null}
-
-        <SafetyCard
-          icon="lock-closed-outline"
-          title="Sicher gespeichert"
-          description="Passwörter werden mit bcrypt gehasht, Sessions über JWT geschützt."
-        />
 
         <Button
           label={submitting ? 'Melde an…' : 'Anmelden'}

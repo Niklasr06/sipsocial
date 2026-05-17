@@ -13,18 +13,20 @@ import IcebreakerScreen from '../screens/IcebreakerScreen';
 import SafetyPrivacyScreen from '../screens/SafetyPrivacyScreen';
 import MeetingRescheduleScreen from '../screens/MeetingRescheduleScreen';
 import ProfileEditScreen from '../screens/ProfileEditScreen';
+import MatchScreen from '../screens/MatchScreen';
 import { useApp } from '../store/AppContext';
 import { colors } from '../theme';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const RootNavigator: React.FC = () => {
-  const { currentUser, availabilities } = useApp();
+  const { currentUser } = useApp();
   const hasCompletedOnboarding = useMemo(() => {
     if (!currentUser) return false;
-    if (currentUser.interests.length < 3) return false;
-    return availabilities.some((a) => a.userId === currentUser.id);
-  }, [currentUser, availabilities]);
+    // Availability ist nicht mehr Pflicht im Onboarding — User können
+    // ohne Slot rein und über Profil → "Verfügbarkeit verwalten" pflegen.
+    return currentUser.interests.length >= 3;
+  }, [currentUser]);
 
   return (
     <Stack.Navigator
@@ -60,6 +62,7 @@ const RootNavigator: React.FC = () => {
           <Stack.Screen name="Safety" component={SafetyPrivacyScreen} />
           <Stack.Screen name="MeetingReschedule" component={MeetingRescheduleScreen} />
           <Stack.Screen name="ProfileEdit" component={ProfileEditScreen} />
+          <Stack.Screen name="Matches" component={MatchScreen} />
         </>
       )}
     </Stack.Navigator>

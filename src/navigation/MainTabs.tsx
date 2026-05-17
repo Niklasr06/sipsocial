@@ -4,7 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { MainTabParamList } from './types';
 import HomeScreen from '../screens/HomeScreen';
-import MatchScreen from '../screens/MatchScreen';
+import ChatListScreen from '../screens/ChatListScreen';
 import MeetingsScreen from '../screens/MeetingsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import { colors } from '../theme';
@@ -13,14 +13,14 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 
 const ICONS: Record<keyof MainTabParamList, keyof typeof Ionicons.glyphMap> = {
   Home: 'home-outline',
-  Matches: 'sparkles-outline',
+  Chat: 'chatbubble-ellipses-outline',
   Meetings: 'cafe-outline',
   Profile: 'person-outline',
 };
 
 const LABELS: Record<keyof MainTabParamList, string> = {
   Home: 'Start',
-  Matches: 'Matches',
+  Chat: 'Chat',
   Meetings: 'Treffen',
   Profile: 'Profil',
 };
@@ -54,7 +54,7 @@ const MainTabs: React.FC = () => {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Matches" component={MatchScreen} />
+      <Tab.Screen name="Chat" component={ChatListScreen} />
       <Tab.Screen name="Meetings" component={MeetingsScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>

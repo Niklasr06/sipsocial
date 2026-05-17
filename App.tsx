@@ -42,7 +42,8 @@ function handleNotificationResponse(
   if (data.type === 'chat_message' && data.match_id) {
     navRef.navigate('LimitedChat', { matchId: data.match_id });
   } else if (data.type === 'match_accepted' && data.match_id) {
-    navRef.navigate('Main', { screen: 'Matches' });
+    // Matches lebt jetzt im Root-Stack, nicht im Bottom-Tab.
+    navRef.navigate('Matches');
   } else if (
     (data.type === 'meeting_created' || data.type === 'meeting_reminder') &&
     data.meeting_id

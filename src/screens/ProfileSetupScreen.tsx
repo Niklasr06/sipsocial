@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { OnboardingStackParamList } from '../navigation/types';
@@ -18,19 +18,14 @@ const MEETING_OPTIONS: { value: MeetingPreference; label: string; emoji: string 
 
 const ProfileSetupScreen: React.FC<Props> = ({ navigation }) => {
   const { currentUser, saveUserToBackend } = useApp();
-  const [pseudonym, setPseudonym] = useState(currentUser?.pseudonym ?? '');
   const [ageRange, setAgeRange] = useState<AgeRange>(currentUser?.ageRange ?? '25-34');
   const [bio, setBio] = useState(currentUser?.bio ?? '');
   const [preference, setPreference] = useState<MeetingPreference>(currentUser?.meetingPreference ?? 'both');
   const [shareOnlyArea, setShareOnlyArea] = useState(currentUser?.privacySettings.shareOnlyArea ?? true);
   const [hideExactAge, setHideExactAge] = useState(currentUser?.privacySettings.hideExactAge ?? false);
 
-  const canContinue = useMemo(() => pseudonym.trim().length >= 2, [pseudonym]);
-
   const onContinue = async () => {
-    if (!canContinue) return;
     await saveUserToBackend({
-      pseudonym: pseudonym.trim(),
       ageRange,
       bio: bio.trim(),
       meetingPreference: preference,
@@ -48,22 +43,14 @@ const ProfileSetupScreen: React.FC<Props> = ({ navigation }) => {
       <Header
         onBack={() => navigation.goBack()}
         title="Profil"
-        subtitle="Schritt 1 von 3"
+        subtitle="Schritt 1 von 2"
       />
       <Text style={styles.headline}>Erzähl ein bisschen von dir.</Text>
       <Text style={styles.subline}>
-        Nur das Pseudonym ist Pflicht. Du entscheidest, was du teilst.
+        Alle Angaben sind optional. Du entscheidest, was du teilst.
       </Text>
 
       <View style={{ marginTop: spacing.xxl }}>
-        <Input
-          label="Pseudonym"
-          value={pseudonym}
-          onChangeText={setPseudonym}
-          autoCapitalize="words"
-          maxLength={20}
-        />
-
         <Text style={[typography.caption, styles.sectionLabel]}>Altersbereich</Text>
         <View style={styles.chipRow}>
           {AGE_RANGES.map((range) => (
@@ -120,7 +107,6 @@ const ProfileSetupScreen: React.FC<Props> = ({ navigation }) => {
         <Button
           label="Weiter zu Interessen"
           onPress={onContinue}
-          disabled={!canContinue}
           fullWidth
           style={{ marginTop: spacing.xxl }}
         />

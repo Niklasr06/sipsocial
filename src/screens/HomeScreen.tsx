@@ -65,6 +65,19 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
         </Pressable>
       </View>
 
+      {/* Match-finden Primary Action */}
+      <Button
+        label="Match finden"
+        variant="primary"
+        onPress={() => {
+          fetchMatches();
+          navigation.navigate('Matches');
+        }}
+        fullWidth
+        style={{ marginTop: spacing.xl }}
+        iconLeft={<Ionicons name="sparkles" size={18} color="#fff" />}
+      />
+
       {/* Availability card */}
       <Card tone="white" padding="lg" style={styles.block}>
         <View style={styles.cardHeader}>
@@ -94,81 +107,6 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
           <NextMeetingBody meeting={nextMeeting} navigation={navigation} />
         </Card>
       ) : null}
-
-      {/* Match suggestions */}
-      <View style={[styles.sectionHeader, { marginTop: spacing.lg }]}>
-        <Text style={[typography.h3, { color: colors.textDark }]}>Aktuelle Vorschläge</Text>
-        <Pressable onPress={() => navigation.navigate('Matches')}>
-          <Text style={[typography.small, { color: colors.primary, fontWeight: '600' }]}>Alle ansehen</Text>
-        </Pressable>
-      </View>
-
-      {activeMatches.length === 0 ? (
-        <Card tone="white" padding="lg">
-          <Text style={[typography.bodyStrong, { color: colors.textDark }]}>
-            Aktuell keine passenden Vorschläge.
-          </Text>
-          <Text style={[typography.body, { color: colors.textSecondary, marginTop: 4 }]}>
-            Aktualisiere deine Verfügbarkeit oder füge weitere Interessen hinzu.
-          </Text>
-          <Button
-            label="Neue Vorschläge suchen"
-            variant="secondary"
-            size="md"
-            onPress={() => fetchMatches()}
-            style={{ marginTop: spacing.lg, alignSelf: 'flex-start' }}
-          />
-        </Card>
-      ) : (
-        activeMatches.slice(0, 2).map((m) => {
-          const other = getUser(m.userBId);
-          const cafe = getCafe(m.suggestedCafeId);
-          if (!other || !cafe) return null;
-          return (
-            <Pressable
-              key={m.id}
-              onPress={() => navigation.navigate('CafeSuggestion', { matchId: m.id })}
-              style={({ pressed }) => [styles.matchCard, pressed && { opacity: 0.92 }]}
-            >
-              <View style={styles.matchTop}>
-                <Avatar initials={other.initials} color={other.accentColor} size={44} />
-                <View style={{ flex: 1, marginLeft: spacing.md }}>
-                  <Text style={[typography.bodyStrong, { color: colors.textDark }]}>
-                    {other.pseudonym}
-                  </Text>
-                  <Text style={[typography.small, { color: colors.textSecondary }]}>
-                    {other.ageRange} · {cafe.area}
-                  </Text>
-                </View>
-                <View style={styles.scorePill}>
-                  <Text style={styles.scorePillText}>{m.score}</Text>
-                </View>
-              </View>
-              <Text style={[typography.small, { color: colors.textSecondary, marginTop: spacing.md }]}>
-                {m.sharedInterests.slice(0, 3).map((i) => `${INTEREST_EMOJI[i] ?? ''} ${i}`).join('  ')}
-              </Text>
-              <View style={styles.matchBottom}>
-                <Ionicons name="cafe-outline" size={16} color={colors.primary} />
-                <Text style={[typography.small, { color: colors.primary, marginLeft: 6 }]}>
-                  {cafe.name} · {m.suggestedStartTime}
-                </Text>
-              </View>
-            </Pressable>
-          );
-        })
-      )}
-
-      <Button
-        label="Neues Match suchen"
-        variant="primary"
-        onPress={() => {
-          fetchMatches();
-          navigation.navigate('Matches');
-        }}
-        fullWidth
-        style={{ marginTop: spacing.lg }}
-        iconLeft={<Ionicons name="search" size={18} color="#fff" />}
-      />
 
       {/* Safety */}
       <View style={{ marginTop: spacing.xxl }}>

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { OnboardingStackParamList } from '../navigation/types';
-import { Button, Header, Input, Screen, SafetyCard } from '../components';
+import { Button, Header, Input, Screen } from '../components';
 import { colors, fonts, spacing, typography } from '../theme';
 import { useApp } from '../store/AppContext';
 import type { AuthError } from '../store/AppContext';
@@ -13,7 +13,7 @@ const PASSWORD_MIN = 8;
 
 const RegisterScreen: React.FC<Props> = ({ navigation }) => {
   const { signUp } = useApp();
-  const [pseudonym, setPseudonym] = useState('');
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -21,8 +21,8 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
-  const pseudonymError =
-    touched && pseudonym.trim().length < 2 ? 'Bitte gib ein Pseudonym (mind. 2 Zeichen) an.' : undefined;
+  const nameError =
+    touched && name.trim().length < 2 ? 'Bitte gib einen Namen (mind. 2 Zeichen) an.' : undefined;
   const emailError =
     touched && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) ? 'Bitte gib eine gültige E-Mail an.' : undefined;
   const passwordError =
@@ -33,8 +33,8 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     touched && confirm !== password ? 'Die Passwörter stimmen nicht überein.' : undefined;
 
   const canContinue =
-    !pseudonymError && !emailError && !passwordError && !confirmError &&
-    pseudonym && email && password && confirm;
+    !nameError && !emailError && !passwordError && !confirmError &&
+    name && email && password && confirm;
 
   const onSubmit = async () => {
     setTouched(true);
@@ -42,9 +42,8 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     setSubmitting(true);
     setServerError(null);
     try {
-      await signUp({ pseudonym: pseudonym.trim(), email: email.trim(), password });
-      // The root navigator forwards to ProfileSetup automatically because the
-      // newly-created user has no interests yet.
+      // Backend-Feld heißt weiter ``pseudonym``; UI nennt es schlicht ``Name``.
+      await signUp({ pseudonym: name.trim(), email: email.trim(), password });
       navigation.navigate('ProfileSetup');
     } catch (e) {
       const err = e as AuthError;
@@ -60,18 +59,18 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
       <View style={styles.container}>
         <Text style={styles.headline}>Schön, dass du da bist.</Text>
         <Text style={styles.subline}>
-          Wähle ein Pseudonym, mit dem du sichtbar bist. Dein Klarname bleibt privat.
+          Wähle einen Namen, mit dem du sichtbar bist.
         </Text>
 
         <View style={{ marginTop: spacing.xxl }}>
           <Input
-            label="Pseudonym"
-            placeholder="z. B. Mara, KaffeeLiebhaber"
+            label="Name"
+            placeholder="z. B. Mara, Niklas, KaffeeLiebhaber"
             autoCapitalize="words"
-            value={pseudonym}
-            onChangeText={setPseudonym}
-            error={pseudonymError}
-            hint="Nur dein Pseudonym ist für andere sichtbar."
+            value={name}
+            onChangeText={setName}
+            error={nameError}
+            hint="So bist du für andere sichtbar."
           />
           <Input
             label="E-Mail"
@@ -106,17 +105,11 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         ) : null}
 
-        <SafetyCard
-          icon="lock-closed-outline"
-          title="Sichere Speicherung"
-          description="Passwörter werden mit bcrypt gehasht. Die App ruft das Backend per JWT auf."
-        />
-
         <Button
           label={submitting ? 'Lege Account an…' : 'Registrieren'}
           onPress={onSubmit}
           fullWidth
-          disabled={!pseudonym || !email || !password || !confirm || submitting}
+          disabled={!name || !email || !password || !confirm || submitting}
           loading={submitting}
           style={{ marginTop: spacing.xxl }}
         />
