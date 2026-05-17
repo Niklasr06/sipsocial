@@ -12,6 +12,7 @@ from typing import List, Optional
 
 from app.db.postgres import get_pool
 from app.schemas.icebreaker import Icebreaker
+from app.services import llm_icebreaker
 from app.services.repo import new_id
 
 
@@ -138,9 +139,27 @@ def _row_to_icebreaker(row) -> Icebreaker:
 
 
 async def generate_icebreakers_for_match(match_id: str, shared_interests: List[str]) -> List[Icebreaker]:
-    bundles = get_questions_for_interests(shared_interests)
-    for b in bundles:
-        b.match_id = match_id
+    """Generate icebreakers for a match.
+
+    Tries Claude Haiku first (one bundle that mixes all shared interests,
+    so the questions feel cohesive). Falls back to the per-interest
+    template bank if the LLM is disabled or fails.
+    """
+    bundles: list[Icebreaker] = []
+    llm_qs = await llm_icebreaker.generate_questions(shared_interests)
+    if llm_qs:
+        bundles.append(
+            Icebreaker(
+                id=new_id("ice"),
+                match_id=match_id,
+                interest="Eure Themen",
+                questions=llm_qs,
+            )
+        )
+    else:
+        bundles = get_questions_for_interests(shared_interests)
+        for b in bundles:
+            b.match_id = match_id
     pool = get_pool()
     if pool is not None:
         async with pool.acquire() as conn:

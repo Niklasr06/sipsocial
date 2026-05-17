@@ -18,7 +18,7 @@ from app.db.postgres import get_pool
 from app.schemas.availability import Availability
 from app.schemas.match import Match, MatchReason
 from app.schemas.user import User
-from app.services import availability_service, cafe_service, user_service
+from app.services import availability_service, block_service, cafe_service, user_service
 from app.services.repo import new_id, parse_jsonb, to_date, to_time
 
 WEIGHT_TIME = 40
@@ -102,11 +102,15 @@ async def find_matches_for_user(user_id: str) -> List[Match]:
     for a in all_avails:
         avails_by_user.setdefault(a.user_id, []).append(a)
 
+    blocked_ids = await block_service.blocked_pair_ids(user_id)
+
     results: list[Match] = []
     for other in all_users:
         if other.id == user_id:
             continue
         if other.trust_status == "suspended":
+            continue
+        if other.id and other.id in blocked_ids:
             continue
         for av_other in avails_by_user.get(other.id or "", []):
             best_score = -1

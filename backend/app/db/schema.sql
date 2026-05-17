@@ -148,3 +148,29 @@ CREATE TABLE IF NOT EXISTS icebreakers (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS icebreakers_match ON icebreakers (match_id);
+
+-- One-way blocks. (a, b) means a doesn't want to see b — matching needs to
+-- skip a pair if EITHER side blocked the other, so the lookup queries OR
+-- both directions.
+CREATE TABLE IF NOT EXISTS blocks (
+  blocker_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  blocked_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  reason       TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (blocker_id, blocked_id)
+);
+CREATE INDEX IF NOT EXISTS blocks_blocked ON blocks (blocked_id);
+
+-- User-submitted reports. Kept lean: no moderation workflow yet, just the
+-- bare minimum so the data is captured for a future admin tool.
+CREATE TABLE IF NOT EXISTS reports (
+  id            TEXT PRIMARY KEY,
+  reporter_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  reported_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  match_id      TEXT,
+  reason        TEXT NOT NULL,
+  details       TEXT NOT NULL DEFAULT '',
+  status        TEXT NOT NULL DEFAULT 'open',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS reports_reported ON reports (reported_id);

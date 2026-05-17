@@ -3,7 +3,8 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
-import { Button, CafeMap, Card, Header, Screen, StatusPill } from '../components';
+import { Pressable } from 'react-native';
+import { Button, CafeMap, Card, Chip, Header, Screen, StatusPill } from '../components';
 import { colors, fonts, radius, spacing, typography } from '../theme';
 import { useApp } from '../store/AppContext';
 import { formatDateLong, formatTimeRange } from '../utils/date';
@@ -39,14 +40,41 @@ const CafeSuggestionScreen: React.FC<Props> = ({ navigation, route }) => {
   const [remoteCafes, setRemoteCafes] = useState<Cafe[] | null>(null);
   const [loadingRemote, setLoadingRemote] = useState(false);
   const [apiNote, setApiNote] = useState<string | null>(null);
+  const [minRating, setMinRating] = useState<number>(0);
+  const [atmosphereFilter, setAtmosphereFilter] = useState<string | null>(null);
 
   const cafesInArea = useMemo(() => {
     if (!initialCafe) return [];
-    if (remoteCafes && remoteCafes.length > 0) return remoteCafes.slice(0, 8);
+    if (remoteCafes && remoteCafes.length > 0) return remoteCafes.slice(0, 12);
     const sameArea = cafes.filter((c) => c.area === initialCafe.area);
     const others = cafes.filter((c) => c.area !== initialCafe.area);
     return [...sameArea, ...others.slice(0, 2)];
   }, [cafes, initialCafe, remoteCafes]);
+
+  // Most common atmosphere tags across the current pool — capped so the
+  // filter row doesn't sprawl. We only surface tags that appear at least
+  // twice; one-off tags become noise.
+  const topAtmospheres = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const c of cafesInArea) {
+      for (const tag of c.atmosphere || []) {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .filter(([, n]) => n >= 2)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([tag]) => tag);
+  }, [cafesInArea]);
+
+  const filteredCafes = useMemo(() => {
+    return cafesInArea.filter((c) => {
+      if (minRating > 0 && c.rating < minRating) return false;
+      if (atmosphereFilter && !c.atmosphere.includes(atmosphereFilter)) return false;
+      return true;
+    });
+  }, [cafesInArea, minRating, atmosphereFilter]);
 
   const [selectedCafeId, setSelectedCafeId] = useState(initialCafe?.id ?? '');
 
@@ -56,6 +84,15 @@ const CafeSuggestionScreen: React.FC<Props> = ({ navigation, route }) => {
       setSelectedCafeId(remoteCafes[0].id);
     }
   }, [remoteCafes, selectedCafeId]);
+
+  // If the active filter hides the currently selected cafe, jump to the
+  // first survivor so the detail card on the page isn't empty.
+  useEffect(() => {
+    if (filteredCafes.length === 0) return;
+    if (!filteredCafes.find((c) => c.id === selectedCafeId)) {
+      setSelectedCafeId(filteredCafes[0].id);
+    }
+  }, [filteredCafes, selectedCafeId]);
 
   if (!match || !initialCafe) {
     return (
@@ -120,9 +157,49 @@ const CafeSuggestionScreen: React.FC<Props> = ({ navigation, route }) => {
         Vorgeschlagen passend zu eurem Bereich. Du kannst auch ein anderes Café wählen.
       </Text>
 
-      <View style={{ marginTop: spacing.xl }}>
+      <View style={{ marginTop: spacing.lg }}>
+        <View style={styles.filterRow}>
+          <Text style={[typography.small, { color: colors.textSecondary, marginRight: spacing.sm }]}>
+            Filter:
+          </Text>
+          <Chip
+            label="Alle"
+            size="sm"
+            selected={minRating === 0 && atmosphereFilter === null}
+            onPress={() => {
+              setMinRating(0);
+              setAtmosphereFilter(null);
+            }}
+          />
+          <Chip
+            label="★ 4.5+"
+            size="sm"
+            selected={minRating === 4.5}
+            onPress={() => setMinRating(minRating === 4.5 ? 0 : 4.5)}
+          />
+          <Chip
+            label="★ 4.0+"
+            size="sm"
+            selected={minRating === 4.0}
+            onPress={() => setMinRating(minRating === 4.0 ? 0 : 4.0)}
+          />
+          {topAtmospheres.map((tag) => (
+            <Chip
+              key={tag}
+              label={tag}
+              size="sm"
+              selected={atmosphereFilter === tag}
+              onPress={() => setAtmosphereFilter(atmosphereFilter === tag ? null : tag)}
+            />
+          ))}
+        </View>
+        {filteredCafes.length === 0 ? (
+          <Text style={[typography.small, { color: colors.textMuted, marginBottom: spacing.sm }]}>
+            Keine Treffer für diesen Filter. <Pressable onPress={() => { setMinRating(0); setAtmosphereFilter(null); }}><Text style={{ color: colors.primary, fontWeight: '600' }}>Filter zurücksetzen</Text></Pressable>
+          </Text>
+        ) : null}
         <CafeMap
-          cafes={cafesInArea}
+          cafes={filteredCafes.length > 0 ? filteredCafes : cafesInArea}
           selectedCafeId={selectedCafeId}
           onSelect={(id) => setSelectedCafeId(id)}
         />
@@ -193,8 +270,10 @@ const CafeSuggestionScreen: React.FC<Props> = ({ navigation, route }) => {
         <Text style={[typography.small, { color: colors.textSecondary, marginTop: 6 }]}>{apiNote}</Text>
       ) : null}
 
-      <Text style={[typography.caption, styles.sectionLabel]}>Alternativen</Text>
-      {cafesInArea.map((c) => (
+      <Text style={[typography.caption, styles.sectionLabel]}>
+        Alternativen ({filteredCafes.length > 0 ? filteredCafes.length : cafesInArea.length})
+      </Text>
+      {(filteredCafes.length > 0 ? filteredCafes : cafesInArea).map((c) => (
         <CafeRow
           key={c.id}
           cafe={c}
@@ -275,6 +354,12 @@ const styles = StyleSheet.create({
   timeBox: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
   actionRow: { flexDirection: 'row', marginTop: spacing.lg },
   sectionLabel: { color: colors.textSecondary, marginTop: spacing.xxl, marginBottom: spacing.sm },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
   altCard: { marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border },
   altCardSelected: { borderColor: colors.primary, backgroundColor: colors.surface },
 });

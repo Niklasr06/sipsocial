@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str = ""
     GOOGLE_MAPS_API_KEY: str = ""
     CHAT_ENCRYPTION_KEY: str = ""
+    # Anthropic API key (optional). When set, icebreakers are generated via
+    # Claude Haiku; otherwise the template bank is used.
+    ANTHROPIC_API_KEY: str = ""
     BACKEND_CORS_ORIGINS: str = "http://localhost:8081,http://localhost:8082,http://localhost:19006,http://localhost:19000"
 
     # JWT secret for session tokens. Generate with:

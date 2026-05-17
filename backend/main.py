@@ -17,12 +17,12 @@ Places key was provided.
 from contextlib import asynccontextmanager
 import logging
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.api import auth, availability, cafes, chat, icebreakers, matching, meetings, profiles, users
+from app.api import auth, availability, blocks, cafes, chat, icebreakers, matching, meetings, profiles, users
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
 from app.db import postgres
@@ -87,5 +87,6 @@ for router in (
     meetings.router,
     chat.router,
     icebreakers.router,
+    blocks.router,
 ):
     app.include_router(router, prefix="/api")

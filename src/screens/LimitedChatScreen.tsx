@@ -3,7 +3,7 @@ import { FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View } from
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/types';
-import { Avatar, Header, Screen } from '../components';
+import { Avatar, Header, Screen, UserActionsSheet } from '../components';
 import { colors, fonts, radius, spacing, typography } from '../theme';
 import { useApp } from '../store/AppContext';
 import { ChatMessage, MAX_MESSAGES_PER_USER } from '../types';
@@ -60,14 +60,22 @@ const LimitedChatScreen: React.FC<Props> = ({ navigation, route }) => {
         title={other.pseudonym}
         subtitle="Begrenzter Chat"
         rightSlot={
-          <Pressable
-            hitSlop={10}
-            onPress={() => navigation.navigate('Icebreakers', { matchId })}
-            style={({ pressed }) => [styles.iceBtn, pressed && { opacity: 0.85 }]}
-          >
-            <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
-            <Text style={styles.iceBtnText}>Icebreaker</Text>
-          </Pressable>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+            <Pressable
+              hitSlop={10}
+              onPress={() => navigation.navigate('Icebreakers', { matchId })}
+              style={({ pressed }) => [styles.iceBtn, pressed && { opacity: 0.85 }]}
+            >
+              <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
+              <Text style={styles.iceBtnText}>Icebreaker</Text>
+            </Pressable>
+            <UserActionsSheet
+              pseudonym={other.pseudonym}
+              userId={other.id}
+              matchId={matchId}
+              onBlocked={() => navigation.goBack()}
+            />
+          </View>
         }
       />
 
