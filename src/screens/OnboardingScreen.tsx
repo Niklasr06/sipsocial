@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { OnboardingStackParamList } from '../navigation/types';
 import { Button, Card, Screen } from '../components';
 import { colors, fonts, radius, spacing, typography } from '../theme';
+import { useApp } from '../store/AppContext';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'Onboarding'>;
 
@@ -32,6 +33,26 @@ const FEATURES: { icon: keyof typeof Ionicons.glyphMap; title: string; descripti
 ];
 
 const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
+  const { currentUser, availabilities, authBootstrapping } = useApp();
+
+  // If a returning user lands here with a stored token, they're already
+  // logged in — show them the next onboarding step they actually need
+  // instead of asking them to "Loslegen" (which leads to Register and
+  // a 409). Wait for the /me bootstrap to finish before deciding.
+  useEffect(() => {
+    if (authBootstrapping) return;
+    if (!currentUser) return;
+    if (currentUser.interests.length < 3) {
+      navigation.replace('ProfileSetup');
+      return;
+    }
+    const hasAvailability = availabilities.some((a) => a.userId === currentUser.id);
+    if (!hasAvailability) {
+      navigation.replace('Availability', { fromOnboarding: true });
+    }
+    // else: fully onboarded — RootNavigator swaps stacks; nothing to do here.
+  }, [authBootstrapping, currentUser, availabilities, navigation]);
+
   return (
     <Screen padded={false}>
       <View style={styles.hero}>
