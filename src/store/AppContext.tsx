@@ -49,6 +49,7 @@ interface AppState {
 type Action =
   | { type: 'SET_USER'; user: User | null }
   | { type: 'UPDATE_USER'; patch: Partial<User> }
+  | { type: 'MERGE_USERS'; users: User[] }
   | { type: 'ADD_AVAILABILITY'; availability: Availability }
   | { type: 'REPLACE_AVAILABILITIES'; userId: string; list: Availability[] }
   | { type: 'REMOVE_AVAILABILITY'; id: string }
@@ -77,6 +78,14 @@ function reducer(state: AppState, action: Action): AppState {
       if (!state.currentUser) return state;
       const next = createProfile(state.currentUser, action.patch);
       return { ...state, currentUser: next };
+    }
+    case 'MERGE_USERS': {
+      // Update existing entries by id, add new ones at the end.
+      const byId = new Map(state.users.map((u) => [u.id, u]));
+      for (const u of action.users) {
+        if (u.id) byId.set(u.id, u);
+      }
+      return { ...state, users: [...byId.values()] };
     }
     case 'ADD_AVAILABILITY':
       return { ...state, availabilities: [...state.availabilities, action.availability] };
@@ -472,11 +481,29 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return existing ? { ...m, id: existing.id, status: existing.status } : m;
       });
       dispatch({ type: 'SET_MATCHES', matches: merged });
+
+      // Pull profile for every match partner we don't have cached yet.
+      // Without this the MatchScreen filter ``if (!other || !cafe) return null``
+      // silently drops the row and the user sees an empty list even though
+      // the matches are in the DB.
+      const knownIds = new Set(state.users.map((u) => u.id));
+      const missingIds = [...new Set(merged.map((m) => m.userBId).filter((id) => id && !knownIds.has(id)))];
+      if (missingIds.length > 0) {
+        const fetched = await Promise.all(
+          missingIds.map((id) =>
+            userApi.get(id).then(apiUserToLocal).catch(() => null),
+          ),
+        );
+        const newUsers = fetched.filter((u): u is User => u !== null);
+        if (newUsers.length > 0) {
+          dispatch({ type: 'MERGE_USERS', users: newUsers });
+        }
+      }
       return merged;
     }
     // Backend offline or empty — fall back to the local matcher.
     return recomputeMatches();
-  }, [state.currentUser, state.matches, recomputeMatches]);
+  }, [state.currentUser, state.matches, state.users, recomputeMatches]);
 
   const updateMatch = useCallback((id: string, patch: Partial<Match>) => {
     dispatch({ type: 'UPDATE_MATCH', id, patch });
