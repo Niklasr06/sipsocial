@@ -17,7 +17,6 @@ import { sendMessage } from '../services/chatService';
 import { simulateCheckIn } from '../services/checkInService';
 import { registerNoShow } from '../services/noShowService';
 import { createProfile } from '../services/profileService';
-import { createSeedMessages } from '../data/mockMessages';
 import {
   apiCafeToLocal,
   apiMeetingToLocal,
@@ -60,7 +59,7 @@ type Action =
   | { type: 'REMOVE_AVAILABILITY'; id: string }
   | { type: 'SET_MATCHES'; matches: Match[] }
   | { type: 'UPDATE_MATCH'; id: string; patch: Partial<Match> }
-  | { type: 'ADD_MEETING'; meeting: Meeting; seedMessages?: ChatMessage[] }
+  | { type: 'ADD_MEETING'; meeting: Meeting }
   | { type: 'UPDATE_MEETING'; id: string; meeting: Meeting }
   | { type: 'ADD_MESSAGE'; message: ChatMessage }
   | { type: 'REPLACE_CHAT_MESSAGES'; matchId: string; messages: ChatMessage[] }
@@ -122,9 +121,6 @@ function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         meetings: [...state.meetings, action.meeting],
-        chatMessages: action.seedMessages
-          ? [...state.chatMessages, ...action.seedMessages]
-          : state.chatMessages,
       };
     case 'UPDATE_MEETING':
       return {
@@ -557,9 +553,8 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const match = state.matches.find((m) => m.id === matchId);
       if (!match) return null;
       const meeting = createMeeting(match);
-      const seedMessages = createSeedMessages(match.id, match.userBId);
       dispatch({ type: 'UPDATE_MATCH', id: matchId, patch: { status: 'accepted' } });
-      dispatch({ type: 'ADD_MEETING', meeting, seedMessages });
+      dispatch({ type: 'ADD_MEETING', meeting });
       return meeting;
     },
     [state.matches],
