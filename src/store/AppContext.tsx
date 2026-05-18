@@ -19,6 +19,7 @@ import { registerNoShow } from '../services/noShowService';
 import { createProfile } from '../services/profileService';
 import { createSeedMessages } from '../data/mockMessages';
 import {
+  apiCafeToLocal,
   apiMeetingToLocal,
   apiUserToLocal,
   backendCheckInMeeting,
@@ -30,6 +31,7 @@ import {
 } from './backendBridge';
 import { authApi } from '../services/authApi';
 import { availabilityApi } from '../services/availabilityApi';
+import { cafeApi } from '../services/cafeApi';
 import { meetingApi } from '../services/meetingApi';
 import { userApi } from '../services/userApi';
 import { ApiError, isApiUnavailable } from '../services/apiClient';
@@ -50,6 +52,7 @@ type Action =
   | { type: 'SET_USER'; user: User | null }
   | { type: 'UPDATE_USER'; patch: Partial<User> }
   | { type: 'MERGE_USERS'; users: User[] }
+  | { type: 'MERGE_CAFES'; cafes: Cafe[] }
   | { type: 'ADD_AVAILABILITY'; availability: Availability }
   | { type: 'REPLACE_AVAILABILITIES'; userId: string; list: Availability[] }
   | { type: 'REMOVE_AVAILABILITY'; id: string }
@@ -86,6 +89,13 @@ function reducer(state: AppState, action: Action): AppState {
         if (u.id) byId.set(u.id, u);
       }
       return { ...state, users: [...byId.values()] };
+    }
+    case 'MERGE_CAFES': {
+      const byId = new Map(state.cafes.map((c) => [c.id, c]));
+      for (const c of action.cafes) {
+        if (c.id) byId.set(c.id, c);
+      }
+      return { ...state, cafes: [...byId.values()] };
     }
     case 'ADD_AVAILABILITY':
       return { ...state, availabilities: [...state.availabilities, action.availability] };
@@ -482,23 +492,35 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
       dispatch({ type: 'SET_MATCHES', matches: merged });
 
-      // Pull profile for every match partner we don't have cached yet.
-      // Without this the MatchScreen filter ``if (!other || !cafe) return null``
-      // silently drops the row and the user sees an empty list even though
-      // the matches are in the DB.
-      const knownIds = new Set(state.users.map((u) => u.id));
-      const missingIds = [...new Set(merged.map((m) => m.userBId).filter((id) => id && !knownIds.has(id)))];
-      if (missingIds.length > 0) {
-        const fetched = await Promise.all(
-          missingIds.map((id) =>
-            userApi.get(id).then(apiUserToLocal).catch(() => null),
-          ),
-        );
-        const newUsers = fetched.filter((u): u is User => u !== null);
-        if (newUsers.length > 0) {
-          dispatch({ type: 'MERGE_USERS', users: newUsers });
-        }
-      }
+      // Lade fehlende Match-Partner + vorgeschlagene Cafés parallel nach.
+      // Ohne die zwei filtert MatchScreen die Zeilen via
+      // ``if (!other || !cafe) return null`` silent raus — User sieht
+      // dann eine leere Liste obwohl die Matches längst in der DB sind.
+      const knownUserIds = new Set(state.users.map((u) => u.id));
+      const knownCafeIds = new Set(state.cafes.map((c) => c.id));
+      const missingUserIds = [
+        ...new Set(merged.map((m) => m.userBId).filter((id) => id && !knownUserIds.has(id))),
+      ];
+      const missingCafeIds = [
+        ...new Set(
+          merged.map((m) => m.suggestedCafeId).filter((id) => id && !knownCafeIds.has(id)),
+        ),
+      ];
+
+      const [fetchedUsers, fetchedCafes] = await Promise.all([
+        Promise.all(
+          missingUserIds.map((id) => userApi.get(id).then(apiUserToLocal).catch(() => null)),
+        ),
+        Promise.all(
+          missingCafeIds.map((id) => cafeApi.get(id).then(apiCafeToLocal).catch(() => null)),
+        ),
+      ]);
+
+      const newUsers = fetchedUsers.filter((u): u is User => u !== null);
+      const newCafes = fetchedCafes.filter((c): c is Cafe => c !== null);
+      if (newUsers.length > 0) dispatch({ type: 'MERGE_USERS', users: newUsers });
+      if (newCafes.length > 0) dispatch({ type: 'MERGE_CAFES', cafes: newCafes });
+
       return merged;
     }
     // Backend offline or empty — fall back to the local matcher.
