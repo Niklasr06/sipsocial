@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -15,11 +15,24 @@ type Props = NativeStackScreenProps<RootStackParamList, 'LimitedChat'>;
 
 const LimitedChatScreen: React.FC<Props> = ({ navigation, route }) => {
   const { matchId } = route.params;
-  const { matches, currentUser, chatMessages, sendChatMessage, getUser } = useApp();
+  const { matches, currentUser, chatMessages, sendChatMessage, loadChatMessages, getUser } = useApp();
   const match = matches.find((m) => m.id === matchId);
-  const other = match ? getUser(match.userBId) : null;
+  const otherId = match
+    ? match.userAId === currentUser?.id
+      ? match.userBId
+      : match.userAId
+    : '';
+  const other = otherId ? getUser(otherId) : null;
   const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Backend-Stand pullen sobald der Screen aufmacht. Beide Seiten sehen
+  // dann den gleichen Verlauf — vorher war der Chat rein lokal.
+  useEffect(() => {
+    void loadChatMessages(matchId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchId]);
 
   const sortedMessages = useMemo(
     () => chatMessages.filter((m) => m.matchId === matchId).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
@@ -40,15 +53,17 @@ const LimitedChatScreen: React.FC<Props> = ({ navigation, route }) => {
   const myLimit = checkMessageLimit(chatMessages, currentUser.id, matchId);
   const otherLimit = checkMessageLimit(chatMessages, other.id, matchId);
 
-  const onSend = () => {
-    if (!draft.trim()) return;
-    const r = sendChatMessage(matchId, draft);
+  const onSend = async () => {
+    if (!draft.trim() || sending) return;
+    setSending(true);
+    setError(null);
+    const r = await sendChatMessage(matchId, draft);
+    setSending(false);
     if (!r.ok) {
       setError(r.reason ?? 'Konnte nicht gesendet werden.');
       return;
     }
     setDraft('');
-    setError(null);
   };
 
   const liveVerdict = draft.trim() ? evaluateMessage(draft) : null;

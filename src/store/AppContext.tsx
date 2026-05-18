@@ -32,8 +32,10 @@ import {
 import { authApi } from '../services/authApi';
 import { availabilityApi } from '../services/availabilityApi';
 import { cafeApi } from '../services/cafeApi';
+import { chatApi } from '../services/chatApi';
 import { meetingApi } from '../services/meetingApi';
 import { userApi } from '../services/userApi';
+import { encryptMessage } from '../utils/crypto';
 import { ApiError, isApiUnavailable } from '../services/apiClient';
 import { getRefreshToken, restoreToken, setTokens } from '../services/tokenStore';
 import { clearPushTokenForCurrentUser, registerPushTokenForCurrentUser } from '../services/pushService';
@@ -61,6 +63,7 @@ type Action =
   | { type: 'ADD_MEETING'; meeting: Meeting; seedMessages?: ChatMessage[] }
   | { type: 'UPDATE_MEETING'; id: string; meeting: Meeting }
   | { type: 'ADD_MESSAGE'; message: ChatMessage }
+  | { type: 'REPLACE_CHAT_MESSAGES'; matchId: string; messages: ChatMessage[] }
   | { type: 'REGISTER_NO_SHOW'; userId: string };
 
 const initialState: AppState = {
@@ -129,7 +132,17 @@ function reducer(state: AppState, action: Action): AppState {
         meetings: state.meetings.map((m) => (m.id === action.id ? action.meeting : m)),
       };
     case 'ADD_MESSAGE':
+      // Dedup: dont add a message if one with the same id is already there.
+      // Happens when sendChatMessage adds optimistically and then the load
+      // afterwards brings the same message back from the server.
+      if (state.chatMessages.some((m) => m.id === action.message.id)) {
+        return state;
+      }
       return { ...state, chatMessages: [...state.chatMessages, action.message] };
+    case 'REPLACE_CHAT_MESSAGES': {
+      const others = state.chatMessages.filter((m) => m.matchId !== action.matchId);
+      return { ...state, chatMessages: [...others, ...action.messages] };
+    }
     case 'REGISTER_NO_SHOW': {
       if (!state.currentUser || state.currentUser.id !== action.userId) return state;
       return { ...state, currentUser: registerNoShow(state.currentUser) };
@@ -196,7 +209,9 @@ export interface AppContextValue extends AppState {
   updateMatch: (id: string, patch: Partial<Match>) => void;
   confirmMatch: (matchId: string) => Meeting | null;
   cancelMatch: (matchId: string) => void;
-  sendChatMessage: (matchId: string, text: string) => { ok: boolean; reason?: string; warnings?: string[] };
+  sendChatMessage: (matchId: string, text: string) => Promise<{ ok: boolean; reason?: string; warnings?: string[] }>;
+  /** Fetch chat history for a match from the backend and merge into local state. */
+  loadChatMessages: (matchId: string) => Promise<void>;
   /**
    * Real QR check-in. The QR payload is a signed JWT the backend issued at
    * meeting creation. Backend verifies token + meeting + participant, then
@@ -549,20 +564,80 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   const sendChatMessage = useCallback(
-    (matchId: string, text: string) => {
+    async (
+      matchId: string,
+      text: string,
+    ): Promise<{ ok: boolean; reason?: string; warnings?: string[] }> => {
       if (!state.currentUser) return { ok: false, reason: 'Nicht eingeloggt.' };
-      const result = sendMessage({
-        messages: state.chatMessages,
-        matchId,
-        senderId: state.currentUser.id,
-        text,
-      });
-      if (result.ok && result.message) {
-        dispatch({ type: 'ADD_MESSAGE', message: result.message });
+
+      try {
+        const res = await chatApi.send(matchId, {
+          sender_id: state.currentUser.id,
+          text,
+        });
+        if (res.ok && res.message) {
+          // Backend liefert plaintext + alle Metadaten. Wir verschlüsseln
+          // lokal mit dem XOR-Mock, damit der lokale State weiter ein
+          // einheitliches Format hat (LimitedChatScreen erwartet
+          // encryptedText). Der "echte" Krypto-Schritt passiert backend-
+          // seitig per Fernet.
+          dispatch({
+            type: 'ADD_MESSAGE',
+            message: {
+              id: res.message.id,
+              matchId: res.message.match_id,
+              senderId: res.message.sender_id,
+              encryptedText: encryptMessage(res.message.text),
+              createdAt: res.message.created_at,
+              messageNumber: res.message.message_number,
+            },
+          });
+        }
+        return { ok: res.ok, reason: res.reason || undefined };
+      } catch (err) {
+        if (isApiUnavailable(err)) {
+          // Offline: behalte die alte Mock-Logik damit lokales Testen weiter
+          // tut. Wer mit echtem Backend arbeitet sieht den Fehler nie.
+          const result = sendMessage({
+            messages: state.chatMessages,
+            matchId,
+            senderId: state.currentUser.id,
+            text,
+          });
+          if (result.ok && result.message) {
+            dispatch({ type: 'ADD_MESSAGE', message: result.message });
+          }
+          return { ok: result.ok, reason: result.reason, warnings: result.warnings };
+        }
+        // eslint-disable-next-line no-console
+        console.error('[chat] send failed:', err);
+        return { ok: false, reason: 'Nachricht konnte nicht gesendet werden.' };
       }
-      return { ok: result.ok, reason: result.reason, warnings: result.warnings };
     },
     [state.chatMessages, state.currentUser],
+  );
+
+  const loadChatMessages = useCallback(
+    async (matchId: string): Promise<void> => {
+      try {
+        const apiMessages = await chatApi.list(matchId);
+        const local: ChatMessage[] = apiMessages.map((m) => ({
+          id: m.id,
+          matchId: m.match_id,
+          senderId: m.sender_id,
+          encryptedText: encryptMessage(m.text),
+          createdAt: m.created_at,
+          messageNumber: m.message_number,
+        }));
+        dispatch({ type: 'REPLACE_CHAT_MESSAGES', matchId, messages: local });
+      } catch (err) {
+        if (!isApiUnavailable(err)) {
+          // eslint-disable-next-line no-console
+          console.warn('[chat] load failed:', err);
+        }
+      }
+    },
+    [],
   );
 
   const checkInToMeeting = useCallback(
@@ -711,6 +786,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       confirmMatch,
       cancelMatch,
       sendChatMessage,
+      loadChatMessages,
       checkInToMeeting,
       simulateOtherUserCheckIn,
       cancelMeeting,
@@ -742,6 +818,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       confirmMatch,
       cancelMatch,
       sendChatMessage,
+      loadChatMessages,
       checkInToMeeting,
       simulateOtherUserCheckIn,
       cancelMeeting,

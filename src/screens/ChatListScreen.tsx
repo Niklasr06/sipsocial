@@ -20,9 +20,11 @@ const ChatListScreen: React.FC<Props> = ({ navigation }) => {
 
   const conversations = useMemo(() => {
     if (!currentUser) return [];
-    // Chats sind nur für angenommene Matches freigeschaltet.
+    // Chat ist ab dem Match offen — alle aktiven Status zählen (Match
+    // hat in den Daten keinen ``cancelled``-Status, deshalb reicht hier
+    // der ``declined``-Filter).
     return matches
-      .filter((m) => m.status === 'accepted')
+      .filter((m) => m.status !== 'declined')
       .map((m) => {
         const otherId = m.userAId === currentUser.id ? m.userBId : m.userAId;
         const other = getUser(otherId);
