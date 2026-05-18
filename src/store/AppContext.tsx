@@ -513,9 +513,15 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       // dann eine leere Liste obwohl die Matches längst in der DB sind.
       const knownUserIds = new Set(state.users.map((u) => u.id));
       const knownCafeIds = new Set(state.cafes.map((c) => c.id));
-      const missingUserIds = [
-        ...new Set(merged.map((m) => m.userBId).filter((id) => id && !knownUserIds.has(id))),
-      ];
+      // Sammle Partner-IDs in beide Richtungen: nach dem De-Dup-Fix können
+      // wir in einer Match-Row entweder user_a oder user_b sein.
+      const partnerIds = new Set<string>();
+      const meId = state.currentUser.id;
+      for (const m of merged) {
+        if (m.userAId && m.userAId !== meId) partnerIds.add(m.userAId);
+        if (m.userBId && m.userBId !== meId) partnerIds.add(m.userBId);
+      }
+      const missingUserIds = [...partnerIds].filter((id) => !knownUserIds.has(id));
       const missingCafeIds = [
         ...new Set(
           merged.map((m) => m.suggestedCafeId).filter((id) => id && !knownCafeIds.has(id)),

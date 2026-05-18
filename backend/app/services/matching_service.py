@@ -182,21 +182,87 @@ async def find_matches_for_user(user_id: str) -> List[Match]:
             results.append(match)
 
     results.sort(key=lambda m: m.score, reverse=True)
-    await _persist_matches(user_id, results)
-    return results
+    # Dedup gegen bereits existierende Pair-Matches (siehe _persist_matches),
+    # damit beide User auf die gleiche match_id zeigen — sonst hat jede Seite
+    # ihre eigene Match-Row und Chat-Messages liegen auf verschiedenen IDs.
+    final = await _persist_matches(user_id, results)
+    return final
 
 
-async def _persist_matches(user_id: str, matches: List[Match]) -> None:
+async def _existing_pair_matches(conn, user_id: str) -> dict[str, dict]:
+    """Map other-user-id → existing match row for any match involving user_id.
+
+    Used by ``_persist_matches`` to reuse an existing pair-match-row instead
+    of inserting a duplicate when the other user already had us as user_b.
+    """
+    rows = await conn.fetch(
+        """
+        SELECT * FROM matches
+        WHERE (user_a_id = $1 OR user_b_id = $1)
+          AND status NOT IN ('declined')
+        """,
+        user_id,
+    )
+    out: dict[str, dict] = {}
+    for r in rows:
+        other = r["user_b_id"] if r["user_a_id"] == user_id else r["user_a_id"]
+        out[other] = dict(r)
+    return out
+
+
+async def _persist_matches(user_id: str, matches: List[Match]) -> List[Match]:
+    """Insert new matches, but reuse any existing pair-match. Returns the
+    canonical list (existing rows take precedence over freshly computed
+    candidates so chat-messages stay on a stable match-id)."""
     pool = get_pool()
     if pool is None or not matches:
-        return
+        return matches
+
+    final: list[Match] = []
     async with pool.acquire() as conn:
         async with conn.transaction():
+            existing = await _existing_pair_matches(conn, user_id)
+            # Welche Other-IDs sind in der neuen Vorschlagsliste?
+            candidate_others = {m.user_b_id for m in matches}
+            # Stale-cleanup: gelöschte/verschollene Vorschläge wo ich user_a war.
             await conn.execute(
-                "DELETE FROM matches WHERE user_a_id = $1 AND status = 'suggested'",
-                user_id,
+                """
+                DELETE FROM matches
+                WHERE user_a_id = $1
+                  AND status = 'suggested'
+                  AND user_b_id <> ALL($2::text[])
+                """,
+                user_id, list(candidate_others),
             )
+
             for m in matches:
+                ex = existing.get(m.user_b_id)
+                if ex:
+                    # Existierende Pair-Row beibehalten — Status, IDs, etc.
+                    final.append(
+                        Match(
+                            id=ex["id"],
+                            user_a_id=ex["user_a_id"],
+                            user_b_id=ex["user_b_id"],
+                            score=m.score,  # refreshed score
+                            shared_interests=m.shared_interests,
+                            suggested_cafe_id=ex["suggested_cafe_id"] or m.suggested_cafe_id,
+                            suggested_date=ex["suggested_date"].isoformat()
+                                if hasattr(ex["suggested_date"], "isoformat")
+                                else str(ex["suggested_date"]),
+                            suggested_start_time=ex["suggested_start_time"].strftime("%H:%M")
+                                if hasattr(ex["suggested_start_time"], "strftime")
+                                else str(ex["suggested_start_time"]),
+                            suggested_end_time=ex["suggested_end_time"].strftime("%H:%M")
+                                if hasattr(ex["suggested_end_time"], "strftime")
+                                else str(ex["suggested_end_time"]),
+                            meeting_preference=ex["meeting_preference"],
+                            status=ex["status"],
+                            reasons=m.reasons,
+                        )
+                    )
+                    continue
+                # Truly new: insert
                 await conn.execute(
                     """
                     INSERT INTO matches
@@ -213,6 +279,8 @@ async def _persist_matches(user_id: str, matches: List[Match]) -> None:
                     m.meeting_preference, m.status,
                     json.dumps([r.model_dump() for r in m.reasons]),
                 )
+                final.append(m)
+    return final
 
 
 async def list_for_user(user_id: str) -> List[Match]:

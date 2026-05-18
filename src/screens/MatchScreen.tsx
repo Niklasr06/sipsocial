@@ -68,7 +68,10 @@ const MatchScreen: React.FC<Props> = ({ navigation }) => {
         )
       ) : (
         open.map((m) => {
-          const other = getUser(m.userBId);
+          // Match-Rows sind seit dem De-Dup-Fix symmetrisch: ich kann user_a
+          // ODER user_b sein. Andere Person ist immer die nicht-ich.
+          const otherId = m.userAId === currentUser?.id ? m.userBId : m.userAId;
+          const other = getUser(otherId);
           const cafe = getCafe(m.suggestedCafeId);
           if (!other || !cafe) return null;
           return (
@@ -94,7 +97,8 @@ const MatchScreen: React.FC<Props> = ({ navigation }) => {
             Bestätigte Matches
           </Text>
           {handled.map((m) => {
-            const other = getUser(m.userBId);
+            const otherId = m.userAId === currentUser?.id ? m.userBId : m.userAId;
+            const other = getUser(otherId);
             const cafe = getCafe(m.suggestedCafeId);
             if (!other || !cafe) return null;
             return (
