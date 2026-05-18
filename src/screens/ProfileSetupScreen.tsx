@@ -22,7 +22,6 @@ const ProfileSetupScreen: React.FC<Props> = ({ navigation }) => {
   const [bio, setBio] = useState(currentUser?.bio ?? '');
   const [preference, setPreference] = useState<MeetingPreference>(currentUser?.meetingPreference ?? 'both');
   const [shareOnlyArea, setShareOnlyArea] = useState(currentUser?.privacySettings.shareOnlyArea ?? true);
-  const [hideExactAge, setHideExactAge] = useState(currentUser?.privacySettings.hideExactAge ?? false);
 
   const onContinue = async () => {
     await saveUserToBackend({
@@ -31,7 +30,6 @@ const ProfileSetupScreen: React.FC<Props> = ({ navigation }) => {
       meetingPreference: preference,
       privacySettings: {
         shareOnlyArea,
-        hideExactAge,
         hideBio: false,
       },
     });
@@ -93,14 +91,6 @@ const ProfileSetupScreen: React.FC<Props> = ({ navigation }) => {
             description="Andere sehen nur den Bereich, nicht den exakten Standort."
             value={shareOnlyArea}
             onChange={setShareOnlyArea}
-          />
-        </Card>
-        <Card tone="white" padding="md">
-          <ToggleRow
-            label="Genaues Alter verbergen"
-            description="Andere sehen nur deinen Altersbereich."
-            value={hideExactAge}
-            onChange={setHideExactAge}
           />
         </Card>
 

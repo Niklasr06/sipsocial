@@ -15,7 +15,6 @@ export type Area =
   | 'Reutlingen';
 
 export interface PrivacySettings {
-  hideExactAge: boolean;
   hideBio: boolean;
   shareOnlyArea: boolean;
 }

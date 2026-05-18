@@ -146,7 +146,6 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={[typography.caption, { color: colors.textSecondary }]}>Datenschutz</Text>
         </View>
         <PrivacyRow label="Nur Bereich teilen" value={currentUser.privacySettings.shareOnlyArea} />
-        <PrivacyRow label="Genaues Alter verbergen" value={currentUser.privacySettings.hideExactAge} />
         <PrivacyRow label="Bio verbergen" value={currentUser.privacySettings.hideBio} />
       </Card>
 

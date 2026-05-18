@@ -29,7 +29,6 @@ export function apiUserToLocal(u: ApiUser): User {
     interests: u.interests,
     meetingPreference: u.meeting_preference,
     privacySettings: {
-      hideExactAge: u.privacy_settings.hide_exact_age,
       hideBio: u.privacy_settings.hide_bio,
       shareOnlyArea: u.privacy_settings.share_only_area,
     },
@@ -94,7 +93,6 @@ export function localUserPatchToApi(patch: Partial<User>) {
   if (patch.meetingPreference !== undefined) out.meeting_preference = patch.meetingPreference;
   if (patch.privacySettings !== undefined) {
     out.privacy_settings = {
-      hide_exact_age: patch.privacySettings.hideExactAge,
       hide_bio: patch.privacySettings.hideBio,
       share_only_area: patch.privacySettings.shareOnlyArea,
     };

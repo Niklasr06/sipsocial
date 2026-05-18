@@ -9,7 +9,6 @@ export interface ApiUser {
   interests: string[];
   meeting_preference: 'one_on_one' | 'group' | 'both';
   privacy_settings: {
-    hide_exact_age: boolean;
     hide_bio: boolean;
     share_only_area: boolean;
   };

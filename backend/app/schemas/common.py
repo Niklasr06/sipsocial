@@ -20,7 +20,9 @@ MeetingStatus = Literal[
 
 
 class PrivacySettings(BaseModel):
-    hide_exact_age: bool = False
+    # ``hide_exact_age`` raus: wir fragen das exakte Alter nie ab,
+    # nur den Bereich. Pydantic ``extra='ignore'`` (Default in v2)
+    # schluckt das Feld aus alter JSONB-Daten lautlos.
     hide_bio: bool = False
     share_only_area: bool = True
 

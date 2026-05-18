@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS users (
   bio                 TEXT NOT NULL DEFAULT '',
   interests           TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   meeting_preference  TEXT NOT NULL DEFAULT 'both',
-  privacy_settings    JSONB NOT NULL DEFAULT '{"hide_exact_age":false,"hide_bio":false,"share_only_area":true}'::jsonb,
+  privacy_settings    JSONB NOT NULL DEFAULT '{"hide_bio":false,"share_only_area":true}'::jsonb,
   no_show_count       INTEGER NOT NULL DEFAULT 0,
   trust_status        TEXT NOT NULL DEFAULT 'trusted',
   initials            TEXT NOT NULL DEFAULT '',

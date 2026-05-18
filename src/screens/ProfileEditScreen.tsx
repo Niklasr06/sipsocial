@@ -38,7 +38,6 @@ const ProfileEditScreen: React.FC<Props> = ({ navigation }) => {
   const [preference, setPreference] = useState<MeetingPreference>(currentUser.meetingPreference);
   const [interests, setInterests] = useState<string[]>(currentUser.interests);
   const [shareOnlyArea, setShareOnlyArea] = useState(currentUser.privacySettings.shareOnlyArea);
-  const [hideExactAge, setHideExactAge] = useState(currentUser.privacySettings.hideExactAge);
   const [hideBio, setHideBio] = useState(currentUser.privacySettings.hideBio);
   const [submitting, setSubmitting] = useState(false);
 
@@ -61,7 +60,6 @@ const ProfileEditScreen: React.FC<Props> = ({ navigation }) => {
       JSON.stringify([...interests].sort()) !==
         JSON.stringify([...currentUser.interests].sort()) ||
       shareOnlyArea !== currentUser.privacySettings.shareOnlyArea ||
-      hideExactAge !== currentUser.privacySettings.hideExactAge ||
       hideBio !== currentUser.privacySettings.hideBio
     );
   }, [
@@ -71,7 +69,6 @@ const ProfileEditScreen: React.FC<Props> = ({ navigation }) => {
     preference,
     interests,
     shareOnlyArea,
-    hideExactAge,
     hideBio,
     currentUser,
   ]);
@@ -87,7 +84,6 @@ const ProfileEditScreen: React.FC<Props> = ({ navigation }) => {
       interests,
       privacySettings: {
         shareOnlyArea,
-        hideExactAge,
         hideBio,
       },
     });
@@ -179,14 +175,6 @@ const ProfileEditScreen: React.FC<Props> = ({ navigation }) => {
             description="Andere sehen nur den Bereich, nicht den exakten Standort."
             value={shareOnlyArea}
             onChange={setShareOnlyArea}
-          />
-        </Card>
-        <Card tone="white" padding="md" style={{ marginBottom: spacing.sm }}>
-          <ToggleRow
-            label="Genaues Alter verbergen"
-            description="Andere sehen nur deinen Altersbereich."
-            value={hideExactAge}
-            onChange={setHideExactAge}
           />
         </Card>
         <Card tone="white" padding="md">
