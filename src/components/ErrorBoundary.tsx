@@ -1,5 +1,6 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import * as Sentry from '@sentry/react';
 import { colors, fonts, spacing } from '../theme';
 
 interface State {
@@ -18,6 +19,7 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
     // Surface to the browser console too.
     // eslint-disable-next-line no-console
     console.error('SipSocial crashed:', error, info);
+    Sentry.captureException(error, { extra: { componentStack: info.componentStack } });
     this.setState({ error, info: info.componentStack ?? error.stack ?? null });
   }
 

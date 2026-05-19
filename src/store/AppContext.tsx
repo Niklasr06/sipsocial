@@ -35,6 +35,7 @@ import { chatApi } from '../services/chatApi';
 import { meetingApi } from '../services/meetingApi';
 import { userApi } from '../services/userApi';
 import { encryptMessage } from '../utils/crypto';
+import { setSentryUser } from './../services/sentry';
 import { ApiError, isApiUnavailable } from '../services/apiClient';
 import { getRefreshToken, restoreToken, setTokens } from '../services/tokenStore';
 import { clearPushTokenForCurrentUser, registerPushTokenForCurrentUser } from '../services/pushService';
@@ -289,6 +290,11 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       cancelled = true;
     };
   }, []);
+
+  // Sentry-Events ohne PII identifizieren — nur die User-ID, kein Name/Mail.
+  useEffect(() => {
+    setSentryUser(state.currentUser?.id ?? null);
+  }, [state.currentUser?.id]);
 
   const signUp = useCallback(
     async (payload: { pseudonym: string; email: string; password: string }): Promise<User> => {

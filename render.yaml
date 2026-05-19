@@ -30,6 +30,8 @@ services:
         sync: false              # optional — leer lassen für Mock-Cafés
       - key: ANTHROPIC_API_KEY
         sync: false              # optional — leer lassen für Template-Icebreaker
+      - key: SENTRY_DSN
+        sync: false              # optional — leer lassen deaktiviert Crash-Reporting
 
       # ---- Statische Production-Settings ----
       - key: JWT_EXPIRES_HOURS
@@ -46,3 +48,5 @@ services:
         value: "https://sipsocial-.*\\.vercel\\.app"
       - key: PYTHON_VERSION
         value: "3.12.6"
+      - key: SENTRY_ENVIRONMENT
+        value: "production"

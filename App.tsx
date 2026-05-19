@@ -7,11 +7,16 @@ import {
   createNavigationContainerRef,
 } from '@react-navigation/native';
 import * as Notifications from 'expo-notifications';
+import { initSentry } from './src/services/sentry';
 import { AppStateProvider } from './src/store/AppContext';
 import RootNavigator from './src/navigation/RootNavigator';
 import { ErrorBoundary, WebPhoneFrame } from './src/components';
 import { colors } from './src/theme';
 import { RootStackParamList } from './src/navigation/types';
+
+// Sentry-Init muss vor dem ersten Render laufen, damit globale Error-Handler
+// hooks installiert sind, bevor irgendwelche Module Fehler werfen.
+initSentry();
 
 const navTheme = {
   ...DefaultTheme,

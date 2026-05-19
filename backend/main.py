@@ -17,6 +17,10 @@ Places key was provided.
 from contextlib import asynccontextmanager
 import logging
 
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -30,6 +34,21 @@ from app.services import reminder_service
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
 logger = logging.getLogger("sipsocial")
+
+# Sentry vor FastAPI initialisieren, sonst greift die Middleware nicht. Wenn
+# ``SENTRY_DSN`` leer ist, bleibt das SDK no-op — kein traffic, keine PII.
+_sentry_settings = get_settings()
+if _sentry_settings.SENTRY_DSN.strip():
+    sentry_sdk.init(
+        dsn=_sentry_settings.SENTRY_DSN,
+        environment=_sentry_settings.SENTRY_ENVIRONMENT,
+        integrations=[
+            StarletteIntegration(transaction_style="endpoint"),
+            FastApiIntegration(transaction_style="endpoint"),
+        ],
+        traces_sample_rate=0.1,
+        send_default_pii=False,
+    )
 
 
 @asynccontextmanager

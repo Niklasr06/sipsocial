@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     # leaked token only works once.
     REFRESH_TOKEN_DAYS: int = 90
 
+    # Sentry-DSN (optional). Ohne DSN bleibt das Sentry-SDK uninitialisiert
+    # und sendet nichts — so können lokale Dev-Runs keine Telemetrie leaken.
+    SENTRY_DSN: str = ""
+    SENTRY_ENVIRONMENT: str = "production"
+
     @property
     def cors_origins(self) -> List[str]:
         return [o.strip() for o in self.BACKEND_CORS_ORIGINS.split(",") if o.strip()]
