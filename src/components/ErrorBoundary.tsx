@@ -1,6 +1,6 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import * as Sentry from '@sentry/react';
+import * as Sentry from '@sentry/react-native';
 import { colors, fonts, spacing } from '../theme';
 
 interface State {

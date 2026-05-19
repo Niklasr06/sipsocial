@@ -1,12 +1,12 @@
 /**
- * Sentry-Init. Frontend läuft aktuell als Web-Bundle auf Vercel — daher
- * ``@sentry/react`` statt ``@sentry/react-native``. Wechsel auf den
- * native-SDK ist später ein Drop-In, wenn iOS/Android via EAS kommen.
+ * Sentry-Init über ``@sentry/react-native``. Auf nativ iOS/Android nutzt
+ * es den nativen Sentry-SDK, auf Web fällt es auf ``@sentry/browser``
+ * zurück — ein SDK, beide Plattformen, kein Drop-In später nötig.
  *
  * DSN kommt aus ``EXPO_PUBLIC_SENTRY_DSN``. Ohne DSN bleibt Sentry stumm
  * (keine Init, keine Events), damit lokale Entwicklung nichts schickt.
  */
-import * as Sentry from '@sentry/react';
+import * as Sentry from '@sentry/react-native';
 
 const DSN = (process.env.EXPO_PUBLIC_SENTRY_DSN ?? '').trim();
 const ENV = (process.env.EXPO_PUBLIC_SENTRY_ENV ?? 'production').trim();
