@@ -14,6 +14,7 @@ import SafetyPrivacyScreen from '../screens/SafetyPrivacyScreen';
 import MeetingRescheduleScreen from '../screens/MeetingRescheduleScreen';
 import ProfileEditScreen from '../screens/ProfileEditScreen';
 import MatchScreen from '../screens/MatchScreen';
+import LegalScreen from '../screens/LegalScreen';
 import { useApp } from '../store/AppContext';
 import { colors } from '../theme';
 
@@ -63,6 +64,7 @@ const RootNavigator: React.FC = () => {
           <Stack.Screen name="MeetingReschedule" component={MeetingRescheduleScreen} />
           <Stack.Screen name="ProfileEdit" component={ProfileEditScreen} />
           <Stack.Screen name="Matches" component={MatchScreen} />
+          <Stack.Screen name="Legal" component={LegalScreen} />
         </>
       )}
     </Stack.Navigator>

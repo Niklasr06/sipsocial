@@ -94,9 +94,28 @@ const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
             {'  '}Anmelden
           </Text>
         </View>
-        <Text style={[typography.small, styles.footerNote]}>
-          Mit der Nutzung stimmst du dem SipSocial-Verhaltenskodex zu.
-        </Text>
+        <View style={styles.legalRow}>
+          <Text
+            style={styles.legalLink}
+            onPress={() => navigation.navigate('Legal', { document: 'nutzungsbedingungen' })}
+          >
+            Nutzungsbedingungen
+          </Text>
+          <Text style={styles.legalDot}>·</Text>
+          <Text
+            style={styles.legalLink}
+            onPress={() => navigation.navigate('Legal', { document: 'datenschutz' })}
+          >
+            Datenschutz
+          </Text>
+          <Text style={styles.legalDot}>·</Text>
+          <Text
+            style={styles.legalLink}
+            onPress={() => navigation.navigate('Legal', { document: 'impressum' })}
+          >
+            Impressum
+          </Text>
+        </View>
       </View>
     </Screen>
   );
@@ -162,6 +181,23 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: 'center',
     marginTop: spacing.sm,
+  },
+  legalRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+  },
+  legalLink: {
+    fontSize: 12,
+    color: colors.textMuted,
+    textDecorationLine: 'underline',
+  },
+  legalDot: {
+    fontSize: 12,
+    color: colors.textMuted,
+    paddingHorizontal: 6,
   },
   altLinkRow: {
     marginTop: spacing.sm,

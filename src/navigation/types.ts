@@ -8,6 +8,7 @@ export type OnboardingStackParamList = {
   PasswordResetConfirm: { email?: string } | undefined;
   ProfileSetup: undefined;
   Interests: undefined;
+  Legal: { document: 'impressum' | 'datenschutz' | 'nutzungsbedingungen' };
 };
 
 export type MainTabParamList = {
@@ -31,4 +32,5 @@ export type RootStackParamList = {
   MeetingReschedule: { meetingId: string };
   ProfileEdit: undefined;
   Matches: undefined;
+  Legal: { document: 'impressum' | 'datenschutz' | 'nutzungsbedingungen' };
 };

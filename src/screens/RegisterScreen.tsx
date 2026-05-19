@@ -117,13 +117,31 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
           </View>
         ) : null}
 
+        <Text style={styles.tosNote}>
+          Mit „Registrieren" stimmst du den{' '}
+          <Text
+            style={styles.tosLink}
+            onPress={() => navigation.navigate('Legal', { document: 'nutzungsbedingungen' })}
+          >
+            Nutzungsbedingungen
+          </Text>
+          {' '}und der{' '}
+          <Text
+            style={styles.tosLink}
+            onPress={() => navigation.navigate('Legal', { document: 'datenschutz' })}
+          >
+            Datenschutzerklärung
+          </Text>
+          {' '}zu.
+        </Text>
+
         <Button
           label={submitting ? 'Lege Account an…' : 'Registrieren'}
           onPress={onSubmit}
           fullWidth
           disabled={!name || !email || !password || !confirm || submitting}
           loading={submitting}
-          style={{ marginTop: spacing.xxl }}
+          style={{ marginTop: spacing.lg }}
         />
 
         <Pressable
@@ -161,6 +179,17 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     alignSelf: 'center',
     paddingVertical: spacing.sm,
+  },
+  tosNote: {
+    ...typography.small,
+    color: colors.textSecondary,
+    marginTop: spacing.xl,
+    lineHeight: 18,
+  },
+  tosLink: {
+    color: colors.primary,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 });
 

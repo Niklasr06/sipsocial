@@ -8,6 +8,7 @@ import PasswordResetRequestScreen from '../screens/PasswordResetRequestScreen';
 import PasswordResetConfirmScreen from '../screens/PasswordResetConfirmScreen';
 import ProfileSetupScreen from '../screens/ProfileSetupScreen';
 import InterestsScreen from '../screens/InterestsScreen';
+import LegalScreen from '../screens/LegalScreen';
 
 const Stack = createNativeStackNavigator<OnboardingStackParamList>();
 
@@ -20,6 +21,7 @@ const OnboardingNavigator: React.FC = () => (
     <Stack.Screen name="PasswordResetConfirm" component={PasswordResetConfirmScreen} />
     <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} />
     <Stack.Screen name="Interests" component={InterestsScreen} />
+    <Stack.Screen name="Legal" component={LegalScreen} />
   </Stack.Navigator>
 );
 

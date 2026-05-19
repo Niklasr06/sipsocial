@@ -178,6 +178,30 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           iconLeft={<Ionicons name="shield-checkmark-outline" size={18} color={colors.textDark} />}
         />
         <Button label="Abmelden" variant="ghost" fullWidth onPress={onLogout} />
+
+        <View style={styles.legalRow}>
+          <Text
+            style={styles.legalLink}
+            onPress={() => navigation.navigate('Legal', { document: 'nutzungsbedingungen' })}
+          >
+            Nutzungsbedingungen
+          </Text>
+          <Text style={styles.legalDot}>·</Text>
+          <Text
+            style={styles.legalLink}
+            onPress={() => navigation.navigate('Legal', { document: 'datenschutz' })}
+          >
+            Datenschutz
+          </Text>
+          <Text style={styles.legalDot}>·</Text>
+          <Text
+            style={styles.legalLink}
+            onPress={() => navigation.navigate('Legal', { document: 'impressum' })}
+          >
+            Impressum
+          </Text>
+        </View>
+
         <Pressable onPress={onDeleteAccount} style={styles.deleteLink} hitSlop={8}>
           <Text style={styles.deleteLinkText}>Account löschen</Text>
         </Pressable>
@@ -233,6 +257,23 @@ const styles = StyleSheet.create({
     color: colors.error,
     fontWeight: '600',
     textDecorationLine: 'underline',
+  },
+  legalRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: spacing.lg,
+  },
+  legalLink: {
+    fontSize: 12,
+    color: colors.textMuted,
+    textDecorationLine: 'underline',
+  },
+  legalDot: {
+    fontSize: 12,
+    color: colors.textMuted,
+    paddingHorizontal: 6,
   },
 });
 
