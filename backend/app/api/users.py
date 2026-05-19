@@ -43,6 +43,18 @@ async def set_push_token(
     return None
 
 
+@router.get("/me/export")
+async def export_me(current_user: User = Depends(get_current_user)) -> dict:
+    """DSGVO Art. 20 — vollständige Datenkopie als JSON. Kein extra
+    Service-Wechsel: der Endpoint gibt das JSON direkt zurück und der
+    Client kann es lokal als Datei speichern.
+    """
+    data = await user_service.export_user_data(current_user.id or "")
+    if data is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return data
+
+
 @router.delete("/me", status_code=204, response_class=Response)
 async def delete_me(current_user: User = Depends(get_current_user)) -> Response:
     """Permanently delete the authenticated user's account.

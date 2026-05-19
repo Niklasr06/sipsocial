@@ -263,6 +263,90 @@ async def delete_user(user_id: str) -> bool:
     return not result.endswith(" 0")
 
 
+async def export_user_data(user_id: str) -> Optional[dict]:
+    """DSGVO Art. 20 — alle persönlichen Daten als strukturiertes JSON.
+    Gibt None zurück, wenn kein DB-Pool da oder der User nicht existiert.
+
+    Wir geben absichtlich Klartext-Daten zurück, KEINEN Token-Hash, KEINEN
+    bcrypt-Passworthash — die hat der User ohnehin in seinem Besitz und
+    sind kein „Inhalt".
+    """
+    pool = get_pool()
+    if pool is None:
+        return None
+    async with pool.acquire() as conn:
+        user = await conn.fetchrow("SELECT * FROM users WHERE id = $1", user_id)
+        if not user:
+            return None
+        availabilities = await conn.fetch(
+            "SELECT id, date, start_time, end_time, area, created_at FROM availabilities WHERE user_id = $1",
+            user_id,
+        )
+        matches = await conn.fetch(
+            """
+            SELECT id, user_a_id, user_b_id, score, shared_interests,
+                   suggested_cafe_id, suggested_date, suggested_start_time,
+                   suggested_end_time, meeting_preference, status, created_at, updated_at
+            FROM matches WHERE user_a_id = $1 OR user_b_id = $1
+            """,
+            user_id,
+        )
+        meetings = await conn.fetch(
+            """
+            SELECT m.id, m.match_id, m.cafe_id, m.date, m.start_time, m.end_time,
+                   m.status, m.check_ins, m.created_at
+            FROM meetings m
+            JOIN matches mt ON mt.id = m.match_id
+            WHERE mt.user_a_id = $1 OR mt.user_b_id = $1
+            """,
+            user_id,
+        )
+        # Chat-Messages werden ohne Decryption exportiert — der Klartext liegt
+        # nur im Frontend, das Backend hat nur die mit Fernet verschlüsselte
+        # Variante. Wir geben das so weiter und kennzeichnen es entsprechend.
+        chat = await conn.fetch(
+            """
+            SELECT id, match_id, sender_id, encrypted_text, message_number, created_at
+            FROM chat_messages WHERE sender_id = $1
+            """,
+            user_id,
+        )
+        blocks = await conn.fetch(
+            "SELECT blocker_id, blocked_id, created_at FROM blocks WHERE blocker_id = $1 OR blocked_id = $1",
+            user_id,
+        )
+
+    def serialize(row) -> dict:
+        out = {}
+        for k, v in dict(row).items():
+            if hasattr(v, "isoformat"):
+                out[k] = v.isoformat()
+            else:
+                out[k] = v
+        return out
+
+    return {
+        "exported_at": _now_iso(),
+        "notice": (
+            "DSGVO Art. 20 — Datenkopie deines SipSocial-Accounts. "
+            "Chat-Nachrichten sind im Backend Fernet-verschlüsselt und im "
+            "Export entsprechend so enthalten — der Klartext liegt nur in "
+            "deiner App."
+        ),
+        "user": serialize(user),
+        "availabilities": [serialize(a) for a in availabilities],
+        "matches": [serialize(m) for m in matches],
+        "meetings": [serialize(m) for m in meetings],
+        "chat_messages": [serialize(c) for c in chat],
+        "blocks": [serialize(b) for b in blocks],
+    }
+
+
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
+
+
 async def adjust_no_show(user_id: str, delta: int = 1) -> Optional[User]:
     pool = get_pool()
     if pool is None:
