@@ -59,10 +59,9 @@ const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
           <Text style={styles.heroIcon}>☕️</Text>
         </View>
         <Text style={styles.brand}>SipSocial</Text>
-        <Text style={styles.headline}>Neue Kontakte beginnen mit einem Kaffee.</Text>
+        <Text style={styles.headline}>Neue Kontakte beim Kaffee.</Text>
         <Text style={styles.subline}>
-          SipSocial verbindet dich sicher und unkompliziert mit Menschen in deiner Nähe.
-          Kein Dating, kein endloser Chat. Einfach treffen.
+          Triff Menschen in deiner Nähe — kein Dating, kein endloser Chat.
         </Text>
       </View>
 
@@ -106,32 +105,32 @@ const OnboardingScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
   hero: {
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
+    paddingTop: spacing.md,
     alignItems: 'center',
   },
   heroIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
-  heroIcon: { fontSize: 34 },
+  heroIcon: { fontSize: 28 },
   brand: {
     fontFamily: fonts.serif,
-    fontSize: 16,
+    fontSize: 14,
     color: colors.primary,
     letterSpacing: 3,
     textTransform: 'uppercase',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   headline: {
-    ...typography.display,
+    ...typography.h1,
     color: colors.textDark,
     textAlign: 'center',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   subline: {
     ...typography.body,
@@ -140,9 +139,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   featuresWrap: {
-    marginTop: spacing.xxl,
+    marginTop: spacing.lg,
     paddingHorizontal: spacing.lg,
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   featureCard: {},
   featureRow: { flexDirection: 'row', alignItems: 'center' },
@@ -157,15 +156,15 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingHorizontal: spacing.lg,
-    marginTop: spacing.xxl,
+    marginTop: spacing.lg,
   },
   footerNote: {
     color: colors.textMuted,
     textAlign: 'center',
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
   },
   altLinkRow: {
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
     flexDirection: 'row',
     justifyContent: 'center',
   },
