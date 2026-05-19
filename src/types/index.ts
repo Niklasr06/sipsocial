@@ -32,7 +32,13 @@ export interface User {
   trustStatus: TrustStatus;
   initials: string;
   accentColor: string;
+  /** Altersgruppen, mit denen der User gematcht werden möchte. Filter
+   *  läuft beidseitig: andere muss in dieser Liste sein, und das eigene
+   *  ageRange muss in der ``matchAgeRanges`` des anderen sein. */
+  matchAgeRanges: AgeRange[];
 }
+
+export const ALL_AGE_RANGES: AgeRange[] = ['18-24', '25-34', '35-44', '45+'];
 
 export interface Availability {
   id: string;

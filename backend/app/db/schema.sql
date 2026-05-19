@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS users (
   trust_status        TEXT NOT NULL DEFAULT 'trusted',
   initials            TEXT NOT NULL DEFAULT '',
   accent_color        TEXT NOT NULL DEFAULT '#7A4E2D',
+  match_age_ranges    TEXT[] NOT NULL DEFAULT ARRAY['18-24','25-34','35-44','45+']::TEXT[],
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -53,6 +54,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
 -- notification permission. Multiple devices per user would need a separate
 -- table — for MVP one slot per user is fine.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS expo_push_token TEXT;
+-- Match-Präferenz fürs Alter. Default = alle Bereiche, damit Bestand
+-- nach der Migration nicht plötzlich keine Matches mehr bekommt.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS match_age_ranges TEXT[]
+  NOT NULL DEFAULT ARRAY['18-24','25-34','35-44','45+']::TEXT[];
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users (lower(email));
 
 CREATE TABLE IF NOT EXISTS availabilities (

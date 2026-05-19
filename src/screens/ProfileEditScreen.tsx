@@ -37,9 +37,18 @@ const ProfileEditScreen: React.FC<Props> = ({ navigation }) => {
   const [bio, setBio] = useState(currentUser.bio ?? '');
   const [preference, setPreference] = useState<MeetingPreference>(currentUser.meetingPreference);
   const [interests, setInterests] = useState<string[]>(currentUser.interests);
+  const [matchAgeRanges, setMatchAgeRanges] = useState<AgeRange[]>(
+    currentUser.matchAgeRanges?.length ? currentUser.matchAgeRanges : ['18-24', '25-34', '35-44', '45+'],
+  );
   const [shareOnlyArea, setShareOnlyArea] = useState(currentUser.privacySettings.shareOnlyArea);
   const [hideBio, setHideBio] = useState(currentUser.privacySettings.hideBio);
   const [submitting, setSubmitting] = useState(false);
+
+  const toggleMatchAge = (range: AgeRange) => {
+    setMatchAgeRanges((prev) =>
+      prev.includes(range) ? prev.filter((r) => r !== range) : [...prev, range],
+    );
+  };
 
   const toggleInterest = (label: string) => {
     setInterests((prev) =>
@@ -49,9 +58,12 @@ const ProfileEditScreen: React.FC<Props> = ({ navigation }) => {
 
   const validPseudonym = pseudonym.trim().length >= 2;
   const enoughInterests = interests.length >= MIN_INTERESTS;
+  const validMatchAges = matchAgeRanges.length >= 1;
 
   // What "saveable" means: form fields are valid AND something actually changed.
   const hasChanges = useMemo(() => {
+    const currentMatchAges =
+      currentUser.matchAgeRanges?.length ? currentUser.matchAgeRanges : ['18-24', '25-34', '35-44', '45+'];
     return (
       pseudonym.trim() !== currentUser.pseudonym ||
       ageRange !== currentUser.ageRange ||
@@ -59,6 +71,8 @@ const ProfileEditScreen: React.FC<Props> = ({ navigation }) => {
       preference !== currentUser.meetingPreference ||
       JSON.stringify([...interests].sort()) !==
         JSON.stringify([...currentUser.interests].sort()) ||
+      JSON.stringify([...matchAgeRanges].sort()) !==
+        JSON.stringify([...currentMatchAges].sort()) ||
       shareOnlyArea !== currentUser.privacySettings.shareOnlyArea ||
       hideBio !== currentUser.privacySettings.hideBio
     );
@@ -68,13 +82,14 @@ const ProfileEditScreen: React.FC<Props> = ({ navigation }) => {
     bio,
     preference,
     interests,
+    matchAgeRanges,
     shareOnlyArea,
     hideBio,
     currentUser,
   ]);
 
   const onSave = async () => {
-    if (!validPseudonym || !enoughInterests || !hasChanges || submitting) return;
+    if (!validPseudonym || !enoughInterests || !validMatchAges || !hasChanges || submitting) return;
     setSubmitting(true);
     await saveUserToBackend({
       pseudonym: pseudonym.trim(),
@@ -82,6 +97,7 @@ const ProfileEditScreen: React.FC<Props> = ({ navigation }) => {
       bio: bio.trim(),
       meetingPreference: preference,
       interests,
+      matchAgeRanges,
       privacySettings: {
         shareOnlyArea,
         hideBio,
@@ -145,6 +161,35 @@ const ProfileEditScreen: React.FC<Props> = ({ navigation }) => {
         </View>
 
         <View style={styles.sectionHeader}>
+          <Text style={[typography.caption, { color: colors.textSecondary }]}>
+            Mit welchen Altersgruppen matchen?
+          </Text>
+          <Text
+            style={[
+              typography.caption,
+              { color: validMatchAges ? colors.success : colors.error },
+            ]}
+          >
+            {matchAgeRanges.length} gewählt
+            {!validMatchAges ? ' · mind. 1' : ''}
+          </Text>
+        </View>
+        <Text style={[typography.small, { color: colors.textMuted, marginBottom: spacing.sm }]}>
+          Mehrere möglich. Du wirst nur Personen vorgeschlagen, deren Alter in dieser Liste ist —
+          und die ihrerseits dein Alter eingeschlossen haben.
+        </Text>
+        <View style={styles.chipRow}>
+          {AGE_RANGES.map((range) => (
+            <Chip
+              key={'match-' + range}
+              label={range + ' Jahre'}
+              selected={matchAgeRanges.includes(range)}
+              onPress={() => toggleMatchAge(range)}
+            />
+          ))}
+        </View>
+
+        <View style={styles.sectionHeader}>
           <Text style={[typography.caption, { color: colors.textSecondary }]}>Interessen</Text>
           <Text
             style={[
@@ -190,7 +235,7 @@ const ProfileEditScreen: React.FC<Props> = ({ navigation }) => {
           label={submitting ? 'Speichere…' : 'Änderungen speichern'}
           onPress={onSave}
           loading={submitting}
-          disabled={!validPseudonym || !enoughInterests || !hasChanges || submitting}
+          disabled={!validPseudonym || !enoughInterests || !validMatchAges || !hasChanges || submitting}
           fullWidth
           style={{ marginTop: spacing.xxl }}
         />

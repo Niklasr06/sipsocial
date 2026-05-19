@@ -21,6 +21,10 @@ def _initials(name: str) -> str:
 
 
 def _row_to_user(row) -> User:
+    # ``match_age_ranges`` kann auf alten DB-Snapshots fehlen, falls die
+    # Migration noch nicht durchlief — dann fallback auf "alle Bereiche",
+    # damit die alten User nicht plötzlich aus den Matches fliegen.
+    age_ranges = list(row["match_age_ranges"]) if "match_age_ranges" in row.keys() and row["match_age_ranges"] else ["18-24", "25-34", "35-44", "45+"]
     return User(
         id=row["id"],
         pseudonym=row["pseudonym"],
@@ -34,6 +38,7 @@ def _row_to_user(row) -> User:
         trust_status=row["trust_status"],
         initials=row["initials"],
         accent_color=row["accent_color"],
+        match_age_ranges=age_ranges,
     )
 
 
@@ -164,6 +169,7 @@ _PATCH_COLUMNS = {
     "bio": "bio",
     "interests": "interests",
     "meeting_preference": "meeting_preference",
+    "match_age_ranges": "match_age_ranges",
 }
 
 

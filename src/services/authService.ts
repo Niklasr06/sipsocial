@@ -20,6 +20,7 @@ export function mockRegister({ pseudonym, email }: MockAuthInput): User {
     interests: [],
     meetingPreference: 'both',
     privacySettings: { hideBio: false, shareOnlyArea: true },
+    matchAgeRanges: ['18-24', '25-34', '35-44', '45+'],
     noShowCount: 0,
     trustStatus: 'trusted',
     initials: initialsFrom(pseudonym || 'Gast'),

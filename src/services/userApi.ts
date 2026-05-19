@@ -16,6 +16,7 @@ export interface ApiUser {
   trust_status: 'trusted' | 'warning' | 'restricted' | 'suspended';
   initials: string;
   accent_color: string;
+  match_age_ranges: Array<'18-24' | '25-34' | '35-44' | '45+'>;
 }
 
 export const userApi = {

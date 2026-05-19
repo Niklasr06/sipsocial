@@ -36,6 +36,9 @@ export function apiUserToLocal(u: ApiUser): User {
     trustStatus: u.trust_status,
     initials: u.initials,
     accentColor: u.accent_color,
+    // Fallback auf "alle Bereiche" — Backend liefert das Feld erst seit
+    // Schema-Migration; alte API-Versionen lassen es weg.
+    matchAgeRanges: u.match_age_ranges ?? ['18-24', '25-34', '35-44', '45+'],
   };
 }
 
@@ -97,6 +100,7 @@ export function localUserPatchToApi(patch: Partial<User>) {
       share_only_area: patch.privacySettings.shareOnlyArea,
     };
   }
+  if (patch.matchAgeRanges !== undefined) out.match_age_ranges = patch.matchAgeRanges;
   return out;
 }
 

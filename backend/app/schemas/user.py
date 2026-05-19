@@ -21,6 +21,9 @@ class UserCreate(BaseModel):
     email: str = Field(pattern=EMAIL_PATTERN, max_length=254)
 
 
+ALL_AGE_RANGES: List[AgeRange] = ["18-24", "25-34", "35-44", "45+"]
+
+
 class UserUpdate(BaseModel):
     pseudonym: Optional[str] = Field(default=None, min_length=2, max_length=24)
     age_range: Optional[AgeRange] = None
@@ -28,6 +31,7 @@ class UserUpdate(BaseModel):
     interests: Optional[List[str]] = None
     meeting_preference: Optional[MeetingPreference] = None
     privacy_settings: Optional[PrivacySettings] = None
+    match_age_ranges: Optional[List[AgeRange]] = Field(default=None, min_length=1)
 
 
 class User(BaseDocument):
@@ -42,6 +46,8 @@ class User(BaseDocument):
     trust_status: TrustStatus = "trusted"
     initials: str = ""
     accent_color: str = "#7A4E2D"
+    # Default: alle Bereiche — neue User bekommen sonst keine Matches.
+    match_age_ranges: List[AgeRange] = Field(default_factory=lambda: list(ALL_AGE_RANGES))
 
 
 class Profile(BaseModel):

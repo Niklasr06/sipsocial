@@ -107,6 +107,11 @@ async def find_matches_for_user(user_id: str) -> List[Match]:
 
     blocked_ids = await block_service.blocked_pair_ids(user_id)
     cooldown_ids = await _recently_declined_partner_ids(user_id)
+    # Beide Seiten müssen einander akzeptieren — sonst verschwindet jemand
+    # nur einseitig aus den Vorschlägen und der/die andere wundert sich.
+    my_prefs = set(me.match_age_ranges or [])
+    if not my_prefs:
+        my_prefs = {"18-24", "25-34", "35-44", "45+"}
 
     results: list[Match] = []
     for other in all_users:
@@ -117,6 +122,11 @@ async def find_matches_for_user(user_id: str) -> List[Match]:
         if other.id and other.id in blocked_ids:
             continue
         if other.id and other.id in cooldown_ids:
+            continue
+        if other.age_range not in my_prefs:
+            continue
+        other_prefs = set(other.match_age_ranges or [])
+        if other_prefs and me.age_range not in other_prefs:
             continue
         for av_other in avails_by_user.get(other.id or "", []):
             best_score = -1
