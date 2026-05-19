@@ -8,6 +8,8 @@ import { MainTabParamList, RootStackParamList } from '../navigation/types';
 import { Avatar, Button, Card, Screen, StatusPill } from '../components';
 import { colors, fonts, radius, spacing, typography } from '../theme';
 import { useApp } from '../store/AppContext';
+import { userApi } from '../services/userApi';
+import { ApiError, isApiUnavailable } from '../services/apiClient';
 import { calculateTrustStatus } from '../services/noShowService';
 import { INTEREST_EMOJI } from '../data/interests';
 import { formatDateLong, formatTimeRange } from '../utils/date';
@@ -29,6 +31,45 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 
   const onLogout = async () => {
     await signOut();
+  };
+
+  const onExportData = async () => {
+    try {
+      const data = await userApi.exportMe();
+      const json = JSON.stringify(data, null, 2);
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        // Im Web: Blob + temp-Link triggert „Download as file".
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `sipsocial-meine-daten-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } else {
+        // Native: zeig dem User die ersten Zeilen plus Hinweis. Echtes
+        // Speichern via expo-file-system / expo-sharing wäre der nächste
+        // Schritt — fürs MVP reicht's, dass die Daten verfügbar sind.
+        Alert.alert(
+          'Datenkopie bereit',
+          `${json.length} Zeichen JSON. Eine native Speichern/Teilen-Funktion folgt — bis dahin kannst du den Export über die Web-Version unter sipsocial.vercel.app abrufen.`,
+        );
+      }
+    } catch (err) {
+      const reason = isApiUnavailable(err)
+        ? 'Backend nicht erreichbar.'
+        : err instanceof ApiError
+        ? err.detail ?? err.message
+        : 'Export fehlgeschlagen.';
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        // eslint-disable-next-line no-alert
+        window.alert(reason);
+      } else {
+        Alert.alert('Fehler', reason);
+      }
+    }
   };
 
   const onDeleteAccount = () => {
@@ -176,6 +217,13 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           fullWidth
           onPress={() => navigation.navigate('Safety')}
           iconLeft={<Ionicons name="shield-checkmark-outline" size={18} color={colors.textDark} />}
+        />
+        <Button
+          label="Meine Daten exportieren"
+          variant="secondary"
+          fullWidth
+          onPress={onExportData}
+          iconLeft={<Ionicons name="download-outline" size={18} color={colors.textDark} />}
         />
         <Button label="Abmelden" variant="ghost" fullWidth onPress={onLogout} />
 

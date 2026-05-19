@@ -28,4 +28,6 @@ export const userApi = {
     apiClient.put<void>('/api/users/me/push-token', { token }),
   /** Permanently delete the caller's account (DSGVO right to erasure). */
   deleteMe: () => apiClient.del<void>('/api/users/me'),
+  /** Vollständige Datenkopie nach DSGVO Art. 20 als unstrukturiertes JSON. */
+  exportMe: () => apiClient.get<unknown>('/api/users/me/export'),
 };
