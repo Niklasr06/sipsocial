@@ -10,7 +10,7 @@ import * as Notifications from 'expo-notifications';
 import { initSentry } from './src/services/sentry';
 import { AppStateProvider } from './src/store/AppContext';
 import RootNavigator from './src/navigation/RootNavigator';
-import { ColdStartBanner, ErrorBoundary, WebPhoneFrame } from './src/components';
+import { ColdStartBanner, ErrorBoundary, StorageConsentBanner, WebPhoneFrame } from './src/components';
 import { colors } from './src/theme';
 import { RootStackParamList } from './src/navigation/types';
 
@@ -88,6 +88,7 @@ export default function App() {
               <StatusBar style="dark" />
               <RootNavigator />
               <ColdStartBanner />
+              <StorageConsentBanner />
             </NavigationContainer>
           </AppStateProvider>
         </SafeAreaProvider>

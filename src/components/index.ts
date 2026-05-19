@@ -16,3 +16,4 @@ export { CafeMap } from './CafeMap';
 export { EmptyState } from './EmptyState';
 export { UserActionsSheet } from './UserActionsSheet';
 export { ColdStartBanner } from './ColdStartBanner';
+export { StorageConsentBanner } from './StorageConsentBanner';
