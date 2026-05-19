@@ -34,5 +34,3 @@ export function setSentryUser(userId: string | null): void {
     Sentry.setUser(null);
   }
 }
-
-export const SentryErrorBoundary = Sentry.ErrorBoundary;

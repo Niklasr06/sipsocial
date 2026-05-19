@@ -93,8 +93,23 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const onDeleteAccount = () => {
-    const doDelete = () => {
-      void deleteAccount();
+    const doDelete = async () => {
+      try {
+        await deleteAccount();
+      } catch (err) {
+        // Backend nicht erreichbar — wir haben in AppContext bewusst NICHT
+        // lokal ausgeloggt, sonst denkt der User der Account sei gelöscht
+        // obwohl er noch da ist. Klare Fehlermeldung statt stiller Cleanup.
+        const reason = isApiUnavailable(err)
+          ? 'Backend antwortet gerade nicht. Bitte später nochmal versuchen — dein Account ist NICHT gelöscht.'
+          : 'Löschen fehlgeschlagen. Bitte später nochmal versuchen.';
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+          // eslint-disable-next-line no-alert
+          window.alert(reason);
+        } else {
+          Alert.alert('Fehler', reason);
+        }
+      }
     };
     const title = 'Account wirklich löschen?';
     const body =
@@ -102,13 +117,13 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
     if (Platform.OS === 'web') {
       // eslint-disable-next-line no-alert
       if (typeof window !== 'undefined' && window.confirm(`${title}\n\n${body}`)) {
-        doDelete();
+        void doDelete();
       }
       return;
     }
     Alert.alert(title, body, [
       { text: 'Abbrechen', style: 'cancel' },
-      { text: 'Endgültig löschen', style: 'destructive', onPress: doDelete },
+      { text: 'Endgültig löschen', style: 'destructive', onPress: () => void doDelete() },
     ]);
   };
 
@@ -118,7 +133,7 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         <Avatar initials={currentUser.initials} color={currentUser.accentColor} size={92} border />
         <Text style={styles.name}>{currentUser.pseudonym}</Text>
         <Text style={[typography.small, { color: colors.textSecondary }]}>
-          {currentUser.ageRange} · Pseudonym
+          {currentUser.age ? `${currentUser.age} Jahre` : currentUser.ageRange} · Pseudonym
         </Text>
         <View style={{ marginTop: spacing.sm }}>
           <StatusPill

@@ -401,11 +401,21 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // cascadet alle abhängigen Daten (availabilities, matches, meetings,
     // chats, blocks, reports, auth-tokens). Lokal danach gleicher
     // Cleanup wie bei signOut.
+    //
+    // Wenn der Backend-Call wegen Netzwerk fehlschlägt, rollen wir NICHT
+    // automatisch lokal aus — sonst denkt der User der Account sei weg,
+    // beim nächsten Login ist er aber doch noch da. Wir werfen den Fehler
+    // an den Caller, der dann „bitte später nochmal" anzeigt.
     try {
       await userApi.deleteMe();
     } catch (err) {
-      // Selbst wenn der Backend-Call fehlschlägt: lokal ausloggen, sonst
-      // wirkt es als ob nichts passiert. Der User kann's nochmal probieren.
+      if (isApiUnavailable(err)) {
+        // eslint-disable-next-line no-console
+        console.warn('[delete] backend nicht erreichbar, kein local-logout:', err);
+        throw err;
+      }
+      // Auth- oder andere Backend-Fehler: trotzdem lokal ausloggen,
+      // weil sonst zwei Realitäten nebeneinander existieren.
       // eslint-disable-next-line no-console
       console.warn('[delete] backend delete failed, signing out locally:', err);
     }

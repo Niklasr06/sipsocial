@@ -9,6 +9,7 @@ import { Avatar, EmptyState, Screen } from '../components';
 import { colors, fonts, spacing, typography } from '../theme';
 import { useApp } from '../store/AppContext';
 import { decryptMessage } from '../utils/crypto';
+import { MAX_MESSAGES_PER_USER } from '../types';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Chat'>,
@@ -88,7 +89,7 @@ const ChatListScreen: React.FC<Props> = ({ navigation }) => {
               <View style={{ alignItems: 'flex-end' }}>
                 <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
                 <Text style={[typography.caption, { color: colors.textMuted, marginTop: 4 }]}>
-                  {c.count}/6
+                  {c.count}/{MAX_MESSAGES_PER_USER * 2}
                 </Text>
               </View>
             </Pressable>
