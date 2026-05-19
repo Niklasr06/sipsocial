@@ -22,7 +22,7 @@ from app.schemas.auth import (
     RegisterRequest,
 )
 from app.schemas.user import User, UserCreate
-from app.services import auth_service, user_service
+from app.services import auth_service, email_service, user_service
 
 logger = logging.getLogger("sipsocial.auth")
 
@@ -117,17 +117,27 @@ async def password_reset_request(request: Request, payload: PasswordResetRequest
     otherwise the endpoint becomes an email-enumeration oracle. Tokens
     valid 15 minutes, single use.
 
-    No email provider wired yet: the reset link is written to the backend
-    log under ``sipsocial.auth``. In production this should obviously go
-    through SES/Postmark/Mailgun.
+    Wenn Postmark konfiguriert ist (``POSTMARK_SERVER_TOKEN`` gesetzt), wird
+    der Code per Mail rausgeschickt. Ohne Konfig landet er nur im Backend-Log
+    — Fallback für lokale Dev-Runs ohne Mail-Provider.
     """
     user = await user_service.get_user_by_email(payload.email)
     if user and user.id:
         token, expires = await auth_service.create_password_reset_token(user.id)
-        logger.warning(
-            "[password-reset] token issued for %s — expires %s · token=%s",
-            payload.email, expires.isoformat(), token,
+        sent = await email_service.send_password_reset_email(
+            to=payload.email,
+            token=token,
+            expires_iso=expires.strftime("%d.%m.%Y %H:%M UTC"),
         )
+        if not sent:
+            # Postmark down oder nicht konfiguriert — Token immer ins Log,
+            # damit der User per Out-of-Band-Weg (Support, Render-Log) noch
+            # an seinen Reset-Code kommt. Loglevel WARN bleibt, sonst geht
+            # die Zeile in Render-Logs unter.
+            logger.warning(
+                "[password-reset] mail-versand fehlgeschlagen für %s — token=%s expires=%s",
+                payload.email, token, expires.isoformat(),
+            )
     return Response(status_code=202)
 
 

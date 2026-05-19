@@ -39,6 +39,18 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = ""
     SENTRY_ENVIRONMENT: str = "production"
 
+    # Postmark (optional). Ohne Token loggt das Backend nur — produktive
+    # Password-Reset-Mails brauchen Token + verifizierte Sender-Signature.
+    POSTMARK_SERVER_TOKEN: str = ""
+    POSTMARK_FROM_EMAIL: str = ""
+    # Public frontend URL — Reset-Mail verlinkt darauf, damit der User
+    # nicht händisch durch die App klickt. Leer = nur Hinweistext in Mail.
+    FRONTEND_URL: str = ""
+
+    @property
+    def has_email(self) -> bool:
+        return bool(self.POSTMARK_SERVER_TOKEN.strip() and self.POSTMARK_FROM_EMAIL.strip())
+
     @property
     def cors_origins(self) -> List[str]:
         return [o.strip() for o in self.BACKEND_CORS_ORIGINS.split(",") if o.strip()]

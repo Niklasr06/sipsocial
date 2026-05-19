@@ -32,6 +32,8 @@ services:
         sync: false              # optional — leer lassen für Template-Icebreaker
       - key: SENTRY_DSN
         sync: false              # optional — leer lassen deaktiviert Crash-Reporting
+      - key: POSTMARK_SERVER_TOKEN
+        sync: false              # optional — leer lassen → Reset-Code nur im Log
 
       # ---- Statische Production-Settings ----
       - key: JWT_EXPIRES_HOURS
@@ -50,3 +52,8 @@ services:
         value: "3.12.6"
       - key: SENTRY_ENVIRONMENT
         value: "production"
+      - key: POSTMARK_FROM_EMAIL
+        # Muss bei Postmark als Sender-Signature verifiziert sein.
+        value: "noreply@sipsocial.app"
+      - key: FRONTEND_URL
+        value: "https://sipsocial.vercel.app"
