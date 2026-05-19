@@ -78,8 +78,29 @@ const initialState: AppState = {
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
-    case 'SET_USER':
+    case 'SET_USER': {
+      // Wenn der User wechselt (Login als anderer Account, signOut, oder
+      // signUp im selben Tab), müssen die user-scoped Collections weg.
+      // Sonst sieht der neue User Meetings/Matches/Chats des vorigen.
+      const prevId = state.currentUser?.id ?? null;
+      const nextId = action.user?.id ?? null;
+      if (prevId !== nextId) {
+        return {
+          ...state,
+          currentUser: action.user,
+          matches: [],
+          meetings: [],
+          chatMessages: [],
+          // Availabilities werden in der Bootstrap-Phase neu vom Backend
+          // gezogen (replaceMyAvailabilities). Bis dahin nur die Mock-
+          // Einträge anderer User behalten — die eigene Liste wird leer.
+          availabilities: state.availabilities.filter(
+            (a) => a.userId !== prevId,
+          ),
+        };
+      }
       return { ...state, currentUser: action.user };
+    }
     case 'UPDATE_USER': {
       if (!state.currentUser) return state;
       const next = createProfile(state.currentUser, action.patch);
