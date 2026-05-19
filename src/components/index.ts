@@ -15,3 +15,4 @@ export { WebPhoneFrame } from './WebPhoneFrame';
 export { CafeMap } from './CafeMap';
 export { EmptyState } from './EmptyState';
 export { UserActionsSheet } from './UserActionsSheet';
+export { ColdStartBanner } from './ColdStartBanner';

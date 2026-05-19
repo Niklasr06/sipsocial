@@ -25,6 +25,27 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
+// Render Free Tier schläft nach 15 Min und braucht 30-50s zum Aufwachen.
+// Wir tracken jeden Request, der länger als ``SLOW_REQUEST_MS`` läuft, und
+// notifizieren die UI — damit der User „Server wacht auf…" sieht statt
+// nur einen stummen Spinner.
+const SLOW_REQUEST_MS = 5000;
+type SlowListener = (slowInFlight: number) => void;
+const slowListeners = new Set<SlowListener>();
+let slowInFlight = 0;
+
+function notifySlow(): void {
+  slowListeners.forEach((fn) => fn(slowInFlight));
+}
+
+export function onSlowRequest(fn: SlowListener): () => void {
+  slowListeners.add(fn);
+  fn(slowInFlight);
+  return () => {
+    slowListeners.delete(fn);
+  };
+}
+
 // Coalesce concurrent refreshes — if 5 requests fail with 401 at once, only
 // one /auth/refresh call should fire, and the others wait on that promise.
 let refreshInFlight: Promise<boolean> | null = null;
@@ -68,6 +89,13 @@ async function doFetch(path: string, opts: RequestOptions): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), apiConfig.requestTimeoutMs);
 
+  let slowFlagged = false;
+  const slowTimer = setTimeout(() => {
+    slowFlagged = true;
+    slowInFlight += 1;
+    notifySlow();
+  }, SLOW_REQUEST_MS);
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
@@ -84,6 +112,11 @@ async function doFetch(path: string, opts: RequestOptions): Promise<Response> {
     });
   } finally {
     clearTimeout(timeout);
+    clearTimeout(slowTimer);
+    if (slowFlagged) {
+      slowInFlight = Math.max(0, slowInFlight - 1);
+      notifySlow();
+    }
   }
 }
 
