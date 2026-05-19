@@ -26,6 +26,9 @@ WEIGHT_AREA = 30
 WEIGHT_INTERESTS = 20
 WEIGHT_PREFERENCE = 10
 MIN_SCORE = 60
+# Wer abgelehnt wurde (egal von welcher Seite) fällt für diese Anzahl Tage
+# aus den Match-Vorschlägen. Verhindert „Stalking via Refresh".
+DECLINE_COOLDOWN_DAYS = 7
 
 
 def _to_minutes(t: str) -> int:
@@ -103,6 +106,7 @@ async def find_matches_for_user(user_id: str) -> List[Match]:
         avails_by_user.setdefault(a.user_id, []).append(a)
 
     blocked_ids = await block_service.blocked_pair_ids(user_id)
+    cooldown_ids = await _recently_declined_partner_ids(user_id)
 
     results: list[Match] = []
     for other in all_users:
@@ -111,6 +115,8 @@ async def find_matches_for_user(user_id: str) -> List[Match]:
         if other.trust_status == "suspended":
             continue
         if other.id and other.id in blocked_ids:
+            continue
+        if other.id and other.id in cooldown_ids:
             continue
         for av_other in avails_by_user.get(other.id or "", []):
             best_score = -1
@@ -187,6 +193,33 @@ async def find_matches_for_user(user_id: str) -> List[Match]:
     # ihre eigene Match-Row und Chat-Messages liegen auf verschiedenen IDs.
     final = await _persist_matches(user_id, results)
     return final
+
+
+async def _recently_declined_partner_ids(user_id: str) -> set[str]:
+    """User-IDs, mit denen es in den letzten ``DECLINE_COOLDOWN_DAYS`` Tagen
+    einen abgelehnten Match-Vorschlag gab — egal in welche Richtung. Wird
+    aus den Vorschlägen ausgeschlossen, damit niemand per Refresh ein
+    bereits abgelehntes Gegenüber erneut präsentiert bekommt.
+    """
+    pool = get_pool()
+    if pool is None:
+        return set()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT user_a_id, user_b_id
+            FROM matches
+            WHERE status = 'declined'
+              AND (user_a_id = $1 OR user_b_id = $1)
+              AND updated_at > now() - ($2::int * INTERVAL '1 day')
+            """,
+            user_id, DECLINE_COOLDOWN_DAYS,
+        )
+    ids: set[str] = set()
+    for r in rows:
+        other = r["user_b_id"] if r["user_a_id"] == user_id else r["user_a_id"]
+        ids.add(other)
+    return ids
 
 
 async def _existing_pair_matches(conn, user_id: str) -> dict[str, dict]:
