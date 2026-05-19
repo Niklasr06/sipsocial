@@ -79,7 +79,7 @@ const DATENSCHUTZ: LegalDocument = {
       heading: '2. Welche Daten wir verarbeiten',
       paragraphs: [
         'Beim Anlegen eines Accounts speichern wir: Name (selbst gewähltes Pseudonym), E-Mail-Adresse und ein bcrypt-Hash deines Passworts. Die Mail nutzen wir ausschließlich für Passwort-Reset.',
-        'Beim Pflegen deines Profils speichern wir: Altersbereich (kein Geburtsdatum), Bio (freiwillig), Interessen, Treffenpräferenzen und Datenschutz-Einstellungen.',
+        'Beim Pflegen deines Profils speichern wir: Alter in ganzen Jahren (kein Geburtsdatum, keine Adresse), Bio (freiwillig), Interessen, Treffenpräferenzen und Datenschutz-Einstellungen. Standardmäßig zeigen wir anderen Nutzern nur deinen Altersbereich (z. B. 25-34); den Toggle „Genaues Alter verbergen" kannst du selbst umlegen.',
         'Beim Eintragen von Verfügbarkeiten speichern wir: Datum, Uhrzeit, Stadtteil — keinen exakten Standort.',
         'Bei Matches und Chat speichern wir: Match-Status, Café-Vorschlag, bis zu 3 Chat-Nachrichten pro Person und Match. Die Nachrichten sind im Backend mit Fernet symmetrisch verschlüsselt.',
         'Beim Treffen: QR-Code-Check-in mit Zeitstempel, optionaler No-Show-Marker.',

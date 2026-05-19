@@ -4,11 +4,13 @@ export interface ApiUser {
   id: string;
   pseudonym: string;
   email: string;
+  age?: number | null;
   age_range: '18-24' | '25-34' | '35-44' | '45+';
   bio: string;
   interests: string[];
   meeting_preference: 'one_on_one' | 'group' | 'both';
   privacy_settings: {
+    hide_exact_age: boolean;
     hide_bio: boolean;
     share_only_area: boolean;
   };

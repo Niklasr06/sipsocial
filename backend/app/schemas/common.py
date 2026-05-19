@@ -20,11 +20,27 @@ MeetingStatus = Literal[
 
 
 class PrivacySettings(BaseModel):
-    # ``hide_exact_age`` raus: wir fragen das exakte Alter nie ab,
-    # nur den Bereich. Pydantic ``extra='ignore'`` (Default in v2)
-    # schluckt das Feld aus alter JSONB-Daten lautlos.
+    # ``hide_exact_age``: standardmäßig zeigen wir den Altersbereich
+    # statt der genauen Zahl. Wer den Slider umlegt, lässt auch die
+    # exakte Zahl Matches sehen.
+    hide_exact_age: bool = True
     hide_bio: bool = False
     share_only_area: bool = True
+
+
+def age_to_range(age: Optional[int]) -> AgeRange:
+    """Bucket eine konkrete Alterszahl in den passenden Bereich. Werte
+    außerhalb 18-99 schnappen auf die Ränder ein — wir validieren auf
+    Eingabe-Ebene, hier soll bloß nichts crashen."""
+    if age is None:
+        return "25-34"
+    if age < 25:
+        return "18-24"
+    if age < 35:
+        return "25-34"
+    if age < 45:
+        return "35-44"
+    return "45+"
 
 
 class CafeLocation(BaseModel):
@@ -58,4 +74,5 @@ __all__ = [
     "MeetingStatus",
     "PrivacySettings",
     "TrustStatus",
+    "age_to_range",
 ]

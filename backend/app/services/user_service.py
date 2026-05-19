@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from app.db.postgres import get_pool
 from app.schemas.user import User, UserCreate, UserUpdate
-from app.schemas.common import PrivacySettings
+from app.schemas.common import PrivacySettings, age_to_range
 from app.services import mock_data
 from app.services.repo import new_id, parse_jsonb
 
@@ -25,10 +25,12 @@ def _row_to_user(row) -> User:
     # Migration noch nicht durchlief — dann fallback auf "alle Bereiche",
     # damit die alten User nicht plötzlich aus den Matches fliegen.
     age_ranges = list(row["match_age_ranges"]) if "match_age_ranges" in row.keys() and row["match_age_ranges"] else ["18-24", "25-34", "35-44", "45+"]
+    age = row["age"] if "age" in row.keys() else None
     return User(
         id=row["id"],
         pseudonym=row["pseudonym"],
         email=row["email"],
+        age=age,
         age_range=row["age_range"],
         bio=row["bio"] or "",
         interests=list(row["interests"] or []),
@@ -165,6 +167,7 @@ async def list_users() -> List[User]:
 
 _PATCH_COLUMNS = {
     "pseudonym": "pseudonym",
+    "age": "age",
     "age_range": "age_range",
     "bio": "bio",
     "interests": "interests",
@@ -187,6 +190,12 @@ async def update_user(user_id: str, patch: UserUpdate) -> Optional[User]:
     data = patch.model_dump(exclude_none=True)
     if not data:
         return await get_user(user_id)
+
+    # Wenn der Client nur ``age`` schickt (neuer Flow), leiten wir
+    # ``age_range`` automatisch ab — Match-Filter und UI-Anzeige
+    # konsumieren beide.
+    if "age" in data and "age_range" not in data:
+        data["age_range"] = age_to_range(data["age"])
 
     set_parts: list[str] = []
     args: list = []

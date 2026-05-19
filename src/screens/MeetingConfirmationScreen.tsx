@@ -6,6 +6,7 @@ import { RootStackParamList } from '../navigation/types';
 import { Avatar, Button, Card, Header, SafetyCard, Screen } from '../components';
 import { colors, fonts, radius, spacing, typography } from '../theme';
 import { useApp } from '../store/AppContext';
+import { displayAge } from '../types';
 import { formatDateLong, formatTimeRange } from '../utils/date';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MeetingConfirmation'>;
@@ -61,7 +62,7 @@ const MeetingConfirmationScreen: React.FC<Props> = ({ navigation, route }) => {
               <Text style={[typography.caption, { color: colors.textSecondary }]}>Mit</Text>
               <Text style={styles.otherName}>{other.pseudonym}</Text>
               <Text style={[typography.small, { color: colors.textSecondary, marginTop: 2 }]}>
-                {other.ageRange} · {match.sharedInterests.length} gemeinsame Interessen
+                {displayAge(other)} · {match.sharedInterests.length} gemeinsame Interessen
               </Text>
             </View>
           </View>

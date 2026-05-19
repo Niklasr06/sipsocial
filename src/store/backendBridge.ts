@@ -24,11 +24,15 @@ export function apiUserToLocal(u: ApiUser): User {
     id,
     pseudonym: u.pseudonym,
     email: u.email,
+    age: u.age ?? undefined,
     ageRange: u.age_range,
     bio: u.bio || '',
     interests: u.interests,
     meetingPreference: u.meeting_preference,
     privacySettings: {
+      // Default true: Backend hat die Spalte ggf. noch nicht migriert,
+      // dann zeigen wir den Bereich (konservativ).
+      hideExactAge: u.privacy_settings.hide_exact_age ?? true,
       hideBio: u.privacy_settings.hide_bio,
       shareOnlyArea: u.privacy_settings.share_only_area,
     },
@@ -90,12 +94,14 @@ export function apiMatchToLocal(m: ApiMatch): Match {
 export function localUserPatchToApi(patch: Partial<User>) {
   const out: Record<string, unknown> = {};
   if (patch.pseudonym !== undefined) out.pseudonym = patch.pseudonym;
+  if (patch.age !== undefined) out.age = patch.age;
   if (patch.ageRange !== undefined) out.age_range = patch.ageRange;
   if (patch.bio !== undefined) out.bio = patch.bio;
   if (patch.interests !== undefined) out.interests = patch.interests;
   if (patch.meetingPreference !== undefined) out.meeting_preference = patch.meetingPreference;
   if (patch.privacySettings !== undefined) {
     out.privacy_settings = {
+      hide_exact_age: patch.privacySettings.hideExactAge,
       hide_bio: patch.privacySettings.hideBio,
       share_only_area: patch.privacySettings.shareOnlyArea,
     };

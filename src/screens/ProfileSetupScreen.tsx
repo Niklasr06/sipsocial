@@ -5,8 +5,7 @@ import { OnboardingStackParamList } from '../navigation/types';
 import { Button, Card, Chip, Header, Input, Screen } from '../components';
 import { colors, fonts, spacing, typography } from '../theme';
 import { useApp } from '../store/AppContext';
-import { AgeRange, MeetingPreference } from '../types';
-import { AGE_RANGES } from '../data/interests';
+import { ageToRange, MeetingPreference } from '../types';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'ProfileSetup'>;
 
@@ -18,18 +17,27 @@ const MEETING_OPTIONS: { value: MeetingPreference; label: string; emoji: string 
 
 const ProfileSetupScreen: React.FC<Props> = ({ navigation }) => {
   const { currentUser, saveUserToBackend } = useApp();
-  const [ageRange, setAgeRange] = useState<AgeRange>(currentUser?.ageRange ?? '25-34');
+  const [ageText, setAgeText] = useState<string>(
+    currentUser?.age ? String(currentUser.age) : '',
+  );
   const [bio, setBio] = useState(currentUser?.bio ?? '');
   const [preference, setPreference] = useState<MeetingPreference>(currentUser?.meetingPreference ?? 'both');
   const [shareOnlyArea, setShareOnlyArea] = useState(currentUser?.privacySettings.shareOnlyArea ?? true);
+  const [hideExactAge, setHideExactAge] = useState(currentUser?.privacySettings.hideExactAge ?? true);
+
+  const ageNum = parseInt(ageText, 10);
+  const ageValid = Number.isFinite(ageNum) && ageNum >= 18 && ageNum <= 99;
 
   const onContinue = async () => {
+    if (!ageValid) return;
     await saveUserToBackend({
-      ageRange,
+      age: ageNum,
+      ageRange: ageToRange(ageNum),
       bio: bio.trim(),
       meetingPreference: preference,
       privacySettings: {
         shareOnlyArea,
+        hideExactAge,
         hideBio: false,
       },
     });
@@ -49,17 +57,21 @@ const ProfileSetupScreen: React.FC<Props> = ({ navigation }) => {
       </Text>
 
       <View style={{ marginTop: spacing.xxl }}>
-        <Text style={[typography.caption, styles.sectionLabel]}>Altersbereich</Text>
-        <View style={styles.chipRow}>
-          {AGE_RANGES.map((range) => (
-            <Chip
-              key={range}
-              label={range + ' Jahre'}
-              selected={ageRange === range}
-              onPress={() => setAgeRange(range)}
-            />
-          ))}
-        </View>
+        <Input
+          label="Dein Alter"
+          placeholder="z. B. 27"
+          value={ageText}
+          onChangeText={(t) => setAgeText(t.replace(/[^0-9]/g, '').slice(0, 2))}
+          keyboardType="number-pad"
+          maxLength={2}
+          hint={
+            !ageText
+              ? 'Wird intern in einen Bereich umgerechnet (z. B. 25-34).'
+              : ageValid
+              ? `→ Altersbereich ${ageToRange(ageNum)}`
+              : 'Bitte 18–99 angeben.'
+          }
+        />
 
         <Input
           label="Über dich (optional)"
@@ -85,7 +97,7 @@ const ProfileSetupScreen: React.FC<Props> = ({ navigation }) => {
         </View>
 
         <Text style={[typography.caption, styles.sectionLabel]}>Datenschutz</Text>
-        <Card tone="white" padding="md" style={{ marginBottom: spacing.md }}>
+        <Card tone="white" padding="md" style={{ marginBottom: spacing.sm }}>
           <ToggleRow
             label="Nur Stadtteil zeigen"
             description="Andere sehen nur den Bereich, nicht den exakten Standort."
@@ -93,10 +105,19 @@ const ProfileSetupScreen: React.FC<Props> = ({ navigation }) => {
             onChange={setShareOnlyArea}
           />
         </Card>
+        <Card tone="white" padding="md" style={{ marginBottom: spacing.md }}>
+          <ToggleRow
+            label="Genaues Alter verbergen"
+            description="Matches sehen nur deinen Altersbereich (z. B. 25-34), nicht deine Zahl."
+            value={hideExactAge}
+            onChange={setHideExactAge}
+          />
+        </Card>
 
         <Button
           label="Weiter zu Interessen"
           onPress={onContinue}
+          disabled={!ageValid}
           fullWidth
           style={{ marginTop: spacing.xxl }}
         />

@@ -15,14 +15,37 @@ export type Area =
   | 'Reutlingen';
 
 export interface PrivacySettings {
+  /** Wenn true (Default), sehen andere nur den Altersbereich, nicht die genaue Zahl. */
+  hideExactAge: boolean;
   hideBio: boolean;
   shareOnlyArea: boolean;
+}
+
+export function ageToRange(age: number | undefined | null): AgeRange {
+  if (age == null) return '25-34';
+  if (age < 25) return '18-24';
+  if (age < 35) return '25-34';
+  if (age < 45) return '35-44';
+  return '45+';
+}
+
+/** Wie wir das Alter eines anderen Users im UI anzeigen. Respektiert den
+ *  ``hideExactAge``-Toggle des Profils und fällt sicher auf den Bereich
+ *  zurück, wenn keine exakte Zahl gespeichert ist. */
+export function displayAge(user: Pick<User, 'age' | 'ageRange' | 'privacySettings'>): string {
+  if (user.age != null && !user.privacySettings.hideExactAge) {
+    return `${user.age}`;
+  }
+  return user.ageRange;
 }
 
 export interface User {
   id: string;
   pseudonym: string;
   email: string;
+  /** Exaktes Alter in Jahren. Optional, weil Bestand vor der Migration
+   *  nur einen Bereich hatte; neue Accounts setzen's beim Onboarding. */
+  age?: number;
   ageRange: AgeRange;
   bio?: string;
   interests: string[];

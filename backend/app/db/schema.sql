@@ -58,6 +58,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS expo_push_token TEXT;
 -- nach der Migration nicht plötzlich keine Matches mehr bekommt.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS match_age_ranges TEXT[]
   NOT NULL DEFAULT ARRAY['18-24','25-34','35-44','45+']::TEXT[];
+-- Exaktes Alter (Jahre). Nullable, weil Bestand vor dieser Migration
+-- nur ein age_range hatte. Beim nächsten Profil-Save wird's gesetzt.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER;
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users (lower(email));
 
 CREATE TABLE IF NOT EXISTS availabilities (

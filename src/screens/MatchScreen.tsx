@@ -8,7 +8,7 @@ import { colors, fonts, radius, spacing, typography } from '../theme';
 import { useApp } from '../store/AppContext';
 import { formatDateLong, formatTimeRange } from '../utils/date';
 import { INTEREST_EMOJI } from '../data/interests';
-import { Match } from '../types';
+import { Match, displayAge } from '../types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Matches'>;
 
@@ -81,7 +81,7 @@ const MatchScreen: React.FC<Props> = ({ navigation }) => {
               otherInitials={other.initials}
               otherColor={other.accentColor}
               otherPseudonym={other.pseudonym}
-              otherAgeRange={other.ageRange}
+              otherAgeRange={displayAge(other)}
               cafeName={cafe.name}
               cafeArea={cafe.area}
               onPropose={() => navigation.navigate('CafeSuggestion', { matchId: m.id })}

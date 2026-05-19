@@ -26,6 +26,7 @@ ALL_AGE_RANGES: List[AgeRange] = ["18-24", "25-34", "35-44", "45+"]
 
 class UserUpdate(BaseModel):
     pseudonym: Optional[str] = Field(default=None, min_length=2, max_length=24)
+    age: Optional[int] = Field(default=None, ge=18, le=99)
     age_range: Optional[AgeRange] = None
     bio: Optional[str] = Field(default=None, max_length=240)
     interests: Optional[List[str]] = None
@@ -37,6 +38,11 @@ class UserUpdate(BaseModel):
 class User(BaseDocument):
     pseudonym: str
     email: str
+    # Exaktes Alter. Optional, weil Altdaten vor der Migration keinen
+    # Wert hatten — neue Accounts setzen's beim Onboarding.
+    age: Optional[int] = Field(default=None, ge=18, le=99)
+    # Wird aus ``age`` abgeleitet sobald letzteres gesetzt ist; bleibt
+    # für Backwards-Compat und als Match-Filter erhalten.
     age_range: AgeRange = "25-34"
     bio: str = ""
     interests: List[str] = Field(default_factory=list)

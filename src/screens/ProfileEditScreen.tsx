@@ -5,7 +5,7 @@ import { RootStackParamList } from '../navigation/types';
 import { Button, Card, Chip, Header, Input, Screen } from '../components';
 import { colors, fonts, spacing, typography } from '../theme';
 import { useApp } from '../store/AppContext';
-import { AgeRange, MeetingPreference } from '../types';
+import { AgeRange, ageToRange, MeetingPreference } from '../types';
 import { AGE_RANGES, ALL_INTERESTS } from '../data/interests';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ProfileEdit'>;
@@ -33,7 +33,7 @@ const ProfileEditScreen: React.FC<Props> = ({ navigation }) => {
   }
 
   const [pseudonym, setPseudonym] = useState(currentUser.pseudonym);
-  const [ageRange, setAgeRange] = useState<AgeRange>(currentUser.ageRange);
+  const [ageText, setAgeText] = useState(currentUser.age ? String(currentUser.age) : '');
   const [bio, setBio] = useState(currentUser.bio ?? '');
   const [preference, setPreference] = useState<MeetingPreference>(currentUser.meetingPreference);
   const [interests, setInterests] = useState<string[]>(currentUser.interests);
@@ -41,8 +41,12 @@ const ProfileEditScreen: React.FC<Props> = ({ navigation }) => {
     currentUser.matchAgeRanges?.length ? currentUser.matchAgeRanges : ['18-24', '25-34', '35-44', '45+'],
   );
   const [shareOnlyArea, setShareOnlyArea] = useState(currentUser.privacySettings.shareOnlyArea);
+  const [hideExactAge, setHideExactAge] = useState(currentUser.privacySettings.hideExactAge);
   const [hideBio, setHideBio] = useState(currentUser.privacySettings.hideBio);
   const [submitting, setSubmitting] = useState(false);
+
+  const ageNum = parseInt(ageText, 10);
+  const ageValid = Number.isFinite(ageNum) && ageNum >= 18 && ageNum <= 99;
 
   const toggleMatchAge = (range: AgeRange) => {
     setMatchAgeRanges((prev) =>
@@ -66,7 +70,7 @@ const ProfileEditScreen: React.FC<Props> = ({ navigation }) => {
       currentUser.matchAgeRanges?.length ? currentUser.matchAgeRanges : ['18-24', '25-34', '35-44', '45+'];
     return (
       pseudonym.trim() !== currentUser.pseudonym ||
-      ageRange !== currentUser.ageRange ||
+      (ageValid && ageNum !== currentUser.age) ||
       bio.trim() !== (currentUser.bio ?? '') ||
       preference !== currentUser.meetingPreference ||
       JSON.stringify([...interests].sort()) !==
@@ -74,32 +78,37 @@ const ProfileEditScreen: React.FC<Props> = ({ navigation }) => {
       JSON.stringify([...matchAgeRanges].sort()) !==
         JSON.stringify([...currentMatchAges].sort()) ||
       shareOnlyArea !== currentUser.privacySettings.shareOnlyArea ||
+      hideExactAge !== currentUser.privacySettings.hideExactAge ||
       hideBio !== currentUser.privacySettings.hideBio
     );
   }, [
     pseudonym,
-    ageRange,
+    ageNum,
+    ageValid,
     bio,
     preference,
     interests,
     matchAgeRanges,
     shareOnlyArea,
+    hideExactAge,
     hideBio,
     currentUser,
   ]);
 
   const onSave = async () => {
-    if (!validPseudonym || !enoughInterests || !validMatchAges || !hasChanges || submitting) return;
+    if (!validPseudonym || !enoughInterests || !validMatchAges || !ageValid || !hasChanges || submitting) return;
     setSubmitting(true);
     await saveUserToBackend({
       pseudonym: pseudonym.trim(),
-      ageRange,
+      age: ageNum,
+      ageRange: ageToRange(ageNum),
       bio: bio.trim(),
       meetingPreference: preference,
       interests,
       matchAgeRanges,
       privacySettings: {
         shareOnlyArea,
+        hideExactAge,
         hideBio,
       },
     });
@@ -125,17 +134,21 @@ const ProfileEditScreen: React.FC<Props> = ({ navigation }) => {
           hint={!validPseudonym ? 'Mindestens 2 Zeichen.' : undefined}
         />
 
-        <Text style={[typography.caption, styles.sectionLabel]}>Altersbereich</Text>
-        <View style={styles.chipRow}>
-          {AGE_RANGES.map((range) => (
-            <Chip
-              key={range}
-              label={range + ' Jahre'}
-              selected={ageRange === range}
-              onPress={() => setAgeRange(range)}
-            />
-          ))}
-        </View>
+        <Input
+          label="Dein Alter"
+          placeholder="z. B. 27"
+          value={ageText}
+          onChangeText={(t) => setAgeText(t.replace(/[^0-9]/g, '').slice(0, 2))}
+          keyboardType="number-pad"
+          maxLength={2}
+          hint={
+            !ageText
+              ? 'Wird intern in einen Bereich umgerechnet.'
+              : ageValid
+              ? `→ Altersbereich ${ageToRange(ageNum)}`
+              : 'Bitte 18–99 angeben.'
+          }
+        />
 
         <Input
           label="Über dich"
@@ -222,6 +235,14 @@ const ProfileEditScreen: React.FC<Props> = ({ navigation }) => {
             onChange={setShareOnlyArea}
           />
         </Card>
+        <Card tone="white" padding="md" style={{ marginBottom: spacing.sm }}>
+          <ToggleRow
+            label="Genaues Alter verbergen"
+            description="Matches sehen nur deinen Altersbereich (z. B. 25-34), nicht deine Zahl."
+            value={hideExactAge}
+            onChange={setHideExactAge}
+          />
+        </Card>
         <Card tone="white" padding="md">
           <ToggleRow
             label="Bio verbergen"
@@ -235,7 +256,7 @@ const ProfileEditScreen: React.FC<Props> = ({ navigation }) => {
           label={submitting ? 'Speichere…' : 'Änderungen speichern'}
           onPress={onSave}
           loading={submitting}
-          disabled={!validPseudonym || !enoughInterests || !validMatchAges || !hasChanges || submitting}
+          disabled={!validPseudonym || !enoughInterests || !validMatchAges || !ageValid || !hasChanges || submitting}
           fullWidth
           style={{ marginTop: spacing.xxl }}
         />
