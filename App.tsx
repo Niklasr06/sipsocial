@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
@@ -66,6 +67,11 @@ export default function App() {
   const tapSub = useRef<Notifications.EventSubscription | null>(null);
 
   useEffect(() => {
+    // expo-notifications hat auf Web keinen nativen Modul-Layer — die
+    // Notification-APIs werfen dort "method not available". Push gibts
+    // im Web eh nicht (kein Apple/Google Push), also komplett überspringen.
+    if (Platform.OS === 'web') return;
+
     tapSub.current = Notifications.addNotificationResponseReceivedListener(
       handleNotificationResponse,
     );

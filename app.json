@@ -19,7 +19,16 @@
       }
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "name": "SipSocial",
+      "shortName": "SipSocial",
+      "description": "Anonyme Café-Treffen in deiner Nähe — sicher, unkompliziert, kein Dating.",
+      "lang": "de",
+      "themeColor": "#7A4E2D",
+      "backgroundColor": "#F7F1E8",
+      "display": "standalone",
+      "orientation": "portrait",
+      "favicon": "./assets/favicon.svg"
     }
   }
 }

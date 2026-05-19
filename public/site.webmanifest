@@ -1,0 +1,20 @@
+{
+  "name": "SipSocial",
+  "short_name": "SipSocial",
+  "description": "Anonyme Café-Treffen in deiner Nähe — sicher, unkompliziert, kein Dating.",
+  "lang": "de",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#7A4E2D",
+  "background_color": "#F7F1E8",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
