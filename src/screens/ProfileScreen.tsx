@@ -20,7 +20,7 @@ type Props = CompositeScreenProps<
 >;
 
 const ProfileScreen: React.FC<Props> = ({ navigation }) => {
-  const { currentUser, availabilities, signOut, deleteAccount } = useApp();
+  const { currentUser, availabilities, signOut, signOutEverywhere, deleteAccount } = useApp();
   if (!currentUser) return null;
 
   const myAvs = availabilities
@@ -31,6 +31,26 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 
   const onLogout = async () => {
     await signOut();
+  };
+
+  const onLogoutEverywhere = () => {
+    const title = 'Auf allen Geräten abmelden?';
+    const body =
+      'Alle anderen aktiven Sessions werden beendet. Du wirst auf diesem Gerät neu eingeloggt bleiben, andere Geräte müssen sich neu anmelden.';
+    const go = () => {
+      void signOutEverywhere();
+    };
+    if (Platform.OS === 'web') {
+      // eslint-disable-next-line no-alert
+      if (typeof window !== 'undefined' && window.confirm(`${title}\n\n${body}`)) {
+        go();
+      }
+      return;
+    }
+    Alert.alert(title, body, [
+      { text: 'Abbrechen', style: 'cancel' },
+      { text: 'Abmelden', style: 'destructive', onPress: go },
+    ]);
   };
 
   const onExportData = async () => {
@@ -224,6 +244,13 @@ const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           fullWidth
           onPress={onExportData}
           iconLeft={<Ionicons name="download-outline" size={18} color={colors.textDark} />}
+        />
+        <Button
+          label="Auf allen Geräten abmelden"
+          variant="secondary"
+          fullWidth
+          onPress={onLogoutEverywhere}
+          iconLeft={<Ionicons name="log-out-outline" size={18} color={colors.textDark} />}
         />
         <Button label="Abmelden" variant="ghost" fullWidth onPress={onLogout} />
 

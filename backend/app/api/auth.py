@@ -103,6 +103,16 @@ async def logout(payload: RefreshRequest) -> Response:
     return Response(status_code=204)
 
 
+@router.post("/logout-all", status_code=204, response_class=Response)
+async def logout_all(current: User = Depends(get_current_user)) -> Response:
+    """Widerruft ALLE Refresh-Tokens dieses Users — alle anderen Geräte
+    werden beim nächsten Refresh ausgeloggt. Praktisch wenn z.B. ein
+    altes Handy verkauft wurde und der User dort noch eingeloggt war.
+    """
+    await auth_service.revoke_all_refresh_tokens_for_user(current.id or "")
+    return Response(status_code=204)
+
+
 @router.get("/me", response_model=User)
 async def me(current: User = Depends(get_current_user)) -> User:
     return current

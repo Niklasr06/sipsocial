@@ -168,6 +168,9 @@ export interface AppContextValue extends AppState {
   signIn: (payload: { email: string; password: string }) => Promise<{ user: User; hasAvailability: boolean }>;
   /** Clears the session and returns the navigator to the onboarding stack. */
   signOut: () => Promise<void>;
+  /** Widerruft alle Refresh-Tokens server-side (also auch auf anderen
+   *  Geräten) und loggt diesen Client anschließend aus. */
+  signOutEverywhere: () => Promise<void>;
   /**
    * Permanently delete the user's account on the backend, then sign out
    * locally. DSGVO Art. 17 (right to erasure). Caller should confirm
@@ -360,6 +363,22 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     },
     [],
   );
+
+  const signOutEverywhere = useCallback(async (): Promise<void> => {
+    // Widerruft alle Refresh-Tokens server-side und loggt anschließend
+    // lokal aus. Die hiesige Session muss zwingend authenticated sein,
+    // damit der Endpoint überhaupt rangeht — also vor setTokens(null).
+    await clearPushTokenForCurrentUser();
+    try {
+      await authApi.logoutEverywhere();
+    } catch {
+      // Best-effort — wenn der Server nicht erreichbar ist, loggen wir
+      // lokal trotzdem aus. Andere Geräte fliegen dann beim nächsten
+      // Refresh raus (sobald das aktuelle Refresh-Token revoked wird).
+    }
+    await setTokens(null, null);
+    dispatch({ type: 'SET_USER', user: null });
+  }, []);
 
   const signOut = useCallback(async (): Promise<void> => {
     // Clear backend push token and revoke the refresh token while we're
@@ -778,6 +797,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       signUp,
       signIn,
       signOut,
+      signOutEverywhere,
       deleteAccount,
       setCurrentUser,
       updateUser,
@@ -810,6 +830,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       signUp,
       signIn,
       signOut,
+      signOutEverywhere,
       deleteAccount,
       setCurrentUser,
       updateUser,

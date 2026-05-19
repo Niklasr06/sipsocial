@@ -23,6 +23,9 @@ export const authApi = {
     apiClient.post<ApiRefreshResponse>('/api/auth/refresh', { refresh_token: refreshToken }),
   logout: (refreshToken: string) =>
     apiClient.post<void>('/api/auth/logout', { refresh_token: refreshToken }),
+  /** Widerruft alle Refresh-Tokens des bearer-auth'd Users — kickt
+   *  damit alle anderen Geräte beim nächsten Refresh raus. */
+  logoutEverywhere: () => apiClient.post<void>('/api/auth/logout-all'),
   me: () => apiClient.get<ApiUser>('/api/auth/me'),
   requestPasswordReset: (email: string) =>
     apiClient.post<void>('/api/auth/password-reset/request', { email }),
