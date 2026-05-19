@@ -53,7 +53,9 @@ services:
       - key: SENTRY_ENVIRONMENT
         value: "production"
       - key: POSTMARK_FROM_EMAIL
-        # Muss bei Postmark als Sender-Signature verifiziert sein.
-        value: "noreply@sipsocial.app"
+        # Muss bei Postmark als Sender-Signature verifiziert sein. Default
+        # ist Niklas' Gmail — kein eigener Domain-Verify nötig, einfach
+        # auf den Confirmation-Link in der Postmark-Mail klicken.
+        value: "niklas.ringeisen06@gmail.com"
       - key: FRONTEND_URL
         value: "https://sipsocial.vercel.app"
