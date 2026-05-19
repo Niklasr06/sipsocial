@@ -12,7 +12,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'MeetingConfirmation'>;
 
 const MeetingConfirmationScreen: React.FC<Props> = ({ navigation, route }) => {
   const { matchId } = route.params;
-  const { matches, getCafe, getUser, confirmMatch, cancelMatch } = useApp();
+  const { matches, currentUser, getCafe, getUser, confirmMatch, cancelMatch } = useApp();
   const match = matches.find((m) => m.id === matchId);
 
   if (!match) {
@@ -27,7 +27,8 @@ const MeetingConfirmationScreen: React.FC<Props> = ({ navigation, route }) => {
   }
 
   const cafe = getCafe(match.suggestedCafeId);
-  const other = getUser(match.userBId);
+  const otherId = match.userAId === currentUser?.id ? match.userBId : match.userAId;
+  const other = getUser(otherId);
 
   const onConfirm = () => {
     const meeting = confirmMatch(match.id);

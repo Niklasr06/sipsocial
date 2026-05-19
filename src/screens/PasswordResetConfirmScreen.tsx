@@ -60,21 +60,30 @@ const PasswordResetConfirmScreen: React.FC<Props> = ({ navigation }) => {
           label="Reset-Code"
           placeholder="z. B. wkpL-rA..."
           value={token}
-          onChangeText={setToken}
+          onChangeText={(t) => {
+            setToken(t);
+            if (error) setError(null);
+          }}
           autoCapitalize="none"
         />
         <Input
           label="Neues Passwort"
           placeholder="Mindestens 8 Zeichen"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(t) => {
+            setPassword(t);
+            if (error) setError(null);
+          }}
           secureTextEntry
           error={password.length > 0 && !passwordValid ? 'Mindestens 8 Zeichen.' : undefined}
         />
         <Input
           label="Passwort bestätigen"
           value={confirm}
-          onChangeText={setConfirm}
+          onChangeText={(t) => {
+            setConfirm(t);
+            if (error) setError(null);
+          }}
           secureTextEntry
           error={confirm.length > 0 && !passwordsMatch ? 'Passwörter stimmen nicht überein.' : undefined}
         />

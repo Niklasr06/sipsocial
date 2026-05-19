@@ -59,14 +59,20 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             keyboardType="email-address"
             autoCapitalize="none"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(t) => {
+              setEmail(t);
+              if (serverError) setServerError(null);
+            }}
             error={emailError}
           />
           <Input
             label="Passwort"
             placeholder="••••••••"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(t) => {
+              setPassword(t);
+              if (serverError) setServerError(null);
+            }}
             secureTextEntry
             error={passwordError}
           />

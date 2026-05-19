@@ -20,9 +20,14 @@ interface FlatQuestion {
 
 const IcebreakerScreen: React.FC<Props> = ({ navigation, route }) => {
   const { matchId } = route.params;
-  const { matches, getUser, getMeetingByMatch } = useApp();
+  const { matches, currentUser, getUser, getMeetingByMatch } = useApp();
   const match = matches.find((m) => m.id === matchId);
-  const other = match ? getUser(match.userBId) : null;
+  const otherId = match
+    ? match.userAId === currentUser?.id
+      ? match.userBId
+      : match.userAId
+    : '';
+  const other = otherId ? getUser(otherId) : null;
   const meeting = match ? getMeetingByMatch(match.id) : undefined;
 
   const [bundles, setBundles] = useState<IcebreakerBundle[] | null>(null);

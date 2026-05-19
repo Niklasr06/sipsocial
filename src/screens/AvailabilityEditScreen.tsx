@@ -61,11 +61,11 @@ const AvailabilityEditScreen: React.FC<Props> = ({ navigation }) => {
     fetchMatches().catch(() => undefined);
     // Sonst zeigt das Formular dasselbe Slot wie der gerade gespeicherte
     // Eintrag — und ``isDuplicate`` flammt direkt mit der Warnung auf.
-    // Wir schieben den Tag eins weiter; die anderen Felder kann der User
-    // bei Bedarf anpassen.
+    // Wir wrapen den Tag, damit auch der letzte Eintrag der Wochenliste
+    // den Reset bekommt.
     const idx = dates.indexOf(selectedDate);
-    if (idx >= 0 && idx < dates.length - 1) {
-      setSelectedDate(dates[idx + 1]);
+    if (idx >= 0) {
+      setSelectedDate(dates[(idx + 1) % dates.length]);
     }
     setSubmitting(false);
   };

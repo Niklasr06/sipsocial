@@ -33,7 +33,7 @@ function mapApiCafe(c: ApiCafe): Cafe {
 
 const CafeSuggestionScreen: React.FC<Props> = ({ navigation, route }) => {
   const { matchId } = route.params;
-  const { matches, cafes, updateMatch, getUser } = useApp();
+  const { matches, cafes, currentUser, updateMatch, getUser } = useApp();
   const match = matches.find((m) => m.id === matchId);
   const initialCafe = match ? cafes.find((c) => c.id === match.suggestedCafeId) : null;
 
@@ -105,7 +105,8 @@ const CafeSuggestionScreen: React.FC<Props> = ({ navigation, route }) => {
     );
   }
 
-  const other = getUser(match.userBId);
+  const otherId = match.userAId === currentUser?.id ? match.userBId : match.userAId;
+  const other = getUser(otherId);
   const selectedCafe =
     (remoteCafes ?? cafes).find((c) => c.id === selectedCafeId) ??
     cafes.find((c) => c.id === selectedCafeId) ??

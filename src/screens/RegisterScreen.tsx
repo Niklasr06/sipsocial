@@ -68,7 +68,10 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
             placeholder="z. B. Mara, Niklas, KaffeeLiebhaber"
             autoCapitalize="words"
             value={name}
-            onChangeText={setName}
+            onChangeText={(t) => {
+              setName(t);
+              if (serverError) setServerError(null);
+            }}
             error={nameError}
             hint="So bist du für andere sichtbar."
           />
@@ -78,14 +81,20 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
             keyboardType="email-address"
             autoCapitalize="none"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(t) => {
+              setEmail(t);
+              if (serverError) setServerError(null);
+            }}
             error={emailError}
           />
           <Input
             label="Passwort"
             placeholder="mindestens 8 Zeichen"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(t) => {
+              setPassword(t);
+              if (serverError) setServerError(null);
+            }}
             secureTextEntry
             error={passwordError}
           />
@@ -93,7 +102,10 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
             label="Passwort bestätigen"
             placeholder="••••••••"
             value={confirm}
-            onChangeText={setConfirm}
+            onChangeText={(t) => {
+              setConfirm(t);
+              if (serverError) setServerError(null);
+            }}
             secureTextEntry
             error={confirmError}
           />
